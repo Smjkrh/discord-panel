@@ -18,6 +18,9 @@ const client = new Client({
   ],
 });
 
+// 봇 준비 상태 추적
+let botReady = false;
+
 client.on('guildCreate', async (guild) => {
   console.log(`새 서버 참가: ${guild.name}`);
 
@@ -39,6 +42,7 @@ client.on('guildCreate', async (guild) => {
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  botReady = true;
 
   const guilds = client.guilds.cache;
 
@@ -520,6 +524,29 @@ app.get('/panel', async (req, res) => {
 app.get('/server/:id', async (req, res) => {
   const guildId = req.params.id;
 
+  // 봇이 아직 준비되지 않았으면 안내
+  if (!botReady) {
+    return res.status(503).send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>봇 준비 중</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:480px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">봇이 아직 준비되지 않았습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            디스코드 봇이 로그인 중이거나 재시작 중입니다.<br/>
+            잠시 후(약 5-10초) 다시 시도해주세요.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
   try {
     // 먼저 DB에서 설정값 조회
     const doc = await db.collection('servers').doc(guildId).get();
@@ -529,6 +556,10 @@ app.get('/server/:id', async (req, res) => {
     try {
       guild = await client.guilds.fetch(guildId);
     } catch (fetchErr) {
+      // 토큰 관련 에러인 경우 특별 처리
+      if (fetchErr.message.includes('token') || fetchErr.message.includes('Expected token')) {
+        throw new Error(`봇이 아직 로그인되지 않았습니다. 잠시 후 다시 시도해주세요. (원본: ${fetchErr.message})`);
+      }
       throw new Error(`서버 정보를 가져올 수 없습니다: ${fetchErr.message}`);
     }
 
@@ -817,6 +848,10 @@ app.post('/server/:id/autorole', async (req, res) => {
 // 서버에서 봇 추방하기
 app.post('/server/:id/kick-bot', async (req, res) => {
   const guildId = req.params.id;
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+  }
 
   try {
     const guild = await client.guilds.fetch(guildId);
