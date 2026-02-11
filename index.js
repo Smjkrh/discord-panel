@@ -525,9 +525,26 @@ app.get('/server/:id', async (req, res) => {
     const doc = await db.collection('servers').doc(guildId).get();
     const data = doc.data() || {};
 
-    const guild = await client.guilds.fetch(guildId);
-    const roles = await guild.roles.fetch();
-    const channels = await guild.channels.fetch();
+    let guild;
+    try {
+      guild = await client.guilds.fetch(guildId);
+    } catch (fetchErr) {
+      throw new Error(`서버 정보를 가져올 수 없습니다: ${fetchErr.message}`);
+    }
+
+    let roles;
+    try {
+      roles = await guild.roles.fetch();
+    } catch (rolesErr) {
+      throw new Error(`역할 목록을 가져올 수 없습니다: ${rolesErr.message}`);
+    }
+
+    let channels;
+    try {
+      channels = await guild.channels.fetch();
+    } catch (channelsErr) {
+      throw new Error(`채널 목록을 가져올 수 없습니다: ${channelsErr.message}`);
+    }
 
     let roleOptions = '';
     roles
@@ -711,7 +728,15 @@ app.get('/server/:id', async (req, res) => {
     `);
   } catch (err) {
     const apiError = err.response?.data;
-    console.error('서버 관리 페이지 로딩 오류:', apiError || err);
+    const errorMessage = err.message || String(err);
+    const errorCode = apiError?.code || err.code || 'UNKNOWN';
+    
+    console.error('서버 관리 페이지 로딩 오류:', {
+      error: apiError || err,
+      message: errorMessage,
+      code: errorCode,
+      stack: err.stack,
+    });
 
     // 디스코드에서 Unknown Guild / Missing Access 인 경우
     if (apiError && (apiError.code === 10004 || apiError.code === 50001)) {
@@ -731,14 +756,18 @@ app.get('/server/:id', async (req, res) => {
               - 봇에 필요한 권한(역할 보기/관리)이 있는지<br/>
               를 확인한 뒤 다시 시도해주세요.
             </p>
-            <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+            <details style="margin-top:12px;padding:10px;background:#0f172a;border-radius:8px;font-size:11px;color:#6b7280;">
+              <summary style="cursor:pointer;color:#9ca3af;">에러 상세 정보</summary>
+              <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;">${JSON.stringify(apiError || { message: errorMessage, code: errorCode }, null, 2)}</pre>
+            </details>
+            <a href="/panel" style="display:inline-block;margin-top:14px;font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
           </div>
         </body>
         </html>
       `);
     }
 
-    // 기타 알 수 없는 오류
+    // 기타 알 수 없는 오류 - 실제 에러 내용 표시
     return res.status(500).send(`
       <!DOCTYPE html>
       <html lang="ko">
@@ -747,12 +776,20 @@ app.get('/server/:id', async (req, res) => {
         <title>서버 관리 오류</title>
       </head>
       <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
-        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+        <div style="max-width:600px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
           <h2 style="margin:0 0 8px 0;font-size:20px;">역할 정보를 불러오는 중 오류가 발생했습니다</h2>
           <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
-            잠시 후 다시 시도해 주세요. 문제가 계속되면 콘솔 로그의 오류 내용을 확인해야 합니다.
+            아래 에러 정보를 확인해주세요. 문제가 계속되면 이 정보를 개발자에게 알려주세요.
           </p>
-          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+          <details style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;font-size:11px;color:#6b7280;border:1px solid rgba(31,41,55,1);" open>
+            <summary style="cursor:pointer;color:#9ca3af;font-weight:600;margin-bottom:8px;">에러 상세 정보</summary>
+            <div style="margin-top:8px;">
+              <div style="margin-bottom:6px;"><strong style="color:#e5e7eb;">에러 코드:</strong> <code style="background:#1e293b;padding:2px 6px;border-radius:4px;">${errorCode}</code></div>
+              <div style="margin-bottom:6px;"><strong style="color:#e5e7eb;">에러 메시지:</strong> <code style="background:#1e293b;padding:2px 6px;border-radius:4px;">${errorMessage}</code></div>
+              ${apiError ? `<div style="margin-top:8px;"><strong style="color:#e5e7eb;">Discord API 응답:</strong><pre style="margin-top:4px;padding:8px;background:#1e293b;border-radius:4px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;font-size:10px;">${JSON.stringify(apiError, null, 2)}</pre></div>` : ''}
+            </div>
+          </details>
+          <a href="/panel" style="display:inline-block;margin-top:14px;font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
         </div>
       </body>
       </html>
