@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Discord Panel – 로그인</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%),
+          radial-gradient(circle at bottom right, #22c55e 0, transparent 50%);
+        color: #e5e7eb;
+      }
+      .shell {
+        position: relative;
+        width: 100%;
+        max-width: 420px;
+        padding: 32px 26px 26px;
+        border-radius: 28px;
+        background: rgba(15, 23, 42, 0.9);
+        box-shadow:
+          0 25px 80px rgba(0, 0, 0, 0.85),
+          0 0 0 1px rgba(148, 163, 184, 0.25);
+        backdrop-filter: blur(20px);
+        overflow: hidden;
+      }
+      .shell::before {
+        content: "";
+        position: absolute;
+        inset: -40%;
+        background:
+          radial-gradient(circle at 10% 0%, rgba(129, 140, 248, 0.32), transparent 50%),
+          radial-gradient(circle at 90% 100%, rgba(56, 189, 248, 0.22), transparent 52%);
+        opacity: 0.9;
+        mix-blend-mode: screen;
+        pointer-events: none;
+      }
+      .inner {
+        position: relative;
+        z-index: 1;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 11px;
+        border-radius: 999px;
+        font-size: 11px;
+        color: #9ca3af;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        margin-bottom: 18px;
+      }
+      .badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+      }
+      .title {
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        margin-bottom: 6px;
+      }
+      .subtitle {
+        font-size: 13px;
+        color: #9ca3af;
+        margin-bottom: 28px;
+      }
+      .discord-login {
+        display: block;
+        width: 100%;
+        padding: 13px 18px;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 600;
+        color: #f9fafb;
+        background: linear-gradient(135deg, #5865f2, #4f46e5);
+        box-shadow:
+          0 18px 40px rgba(88, 101, 242, 0.65),
+          0 0 0 1px rgba(165, 180, 252, 0.9);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        text-decoration: none;
+        transition:
+          transform 0.12s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+      .discord-login span {
+        letter-spacing: 0.03em;
+      }
+      .discord-login:hover {
+        transform: translateY(-1px);
+        background: linear-gradient(135deg, #4f46e5, #4338ca);
+        box-shadow:
+          0 22px 50px rgba(88, 101, 242, 0.9),
+          0 0 0 1px rgba(191, 219, 254, 1);
+      }
+      .discord-login:active {
+        transform: translateY(0);
+        box-shadow:
+          0 14px 30px rgba(88, 101, 242, 0.7),
+          0 0 0 1px rgba(165, 180, 252, 0.9);
+      }
+      .discord-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: radial-gradient(circle at 30% 0%, #ffffff, #c7d2fe);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #4f46e5;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      .footnote {
+        margin-top: 18px;
+        font-size: 11px;
+        color: #6b7280;
+      }
+      .footnote-strong {
+        color: #9ca3af;
+      }
+      @media (max-width: 480px) {
+        .shell {
+          margin: 18px;
+          padding: 26px 20px 22px;
+          border-radius: 24px;
+        }
+        .title {
+          font-size: 23px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="inner">
+        <div class="badge">
+          <div class="badge-dot"></div>
+          <span>관리자 전용 디스코드 패널</span>
+        </div>
+        <div class="title">Discord Control Panel</div>
+        <div class="subtitle">디스코드 계정으로 로그인하여 서버를 관리하고, 봇을 초대하세요.</div>
+
+        <a href="/login" class="discord-login">
+          <div class="discord-icon">D</div>
+          <span>디스코드로 로그인</span>
+        </a>
+
+        <div class="footnote">
+          <span class="footnote-strong">Tip.</span>
+          로그인 후 접속 가능한 서버 목록이 표시되며, 원하는 서버에 바로 봇을 초대할 수 있습니다.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
