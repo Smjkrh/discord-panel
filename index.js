@@ -5,14 +5,14 @@ const cors = require('cors');
 
 const { Client, GatewayIntentBits } = require('discord.js');
 
-// 디스코드 봇 클라이언트
+// ===== 디스코드 봇 클라이언트 =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 client.on('guildCreate', async (guild) => {
@@ -24,13 +24,13 @@ client.on('guildCreate', async (guild) => {
       ownerId: guild.ownerId,
       autoRole: null,
       welcomeChannel: null,
-      welcomeMessage: "환영합니다!",
-      createdAt: new Date()
+      welcomeMessage: '환영합니다!',
+      createdAt: new Date(),
     });
 
-    console.log("DB에 서버 등록 완료");
+    console.log('DB에 서버 등록 완료');
   } catch (err) {
-    console.error("DB 저장 실패:", err);
+    console.error('DB 저장 실패:', err);
   }
 });
 
@@ -48,8 +48,8 @@ client.once('ready', async () => {
         ownerId: guild.ownerId,
         autoRole: null,
         welcomeChannel: null,
-        welcomeMessage: "환영합니다!",
-        createdAt: new Date()
+        welcomeMessage: '환영합니다!',
+        createdAt: new Date(),
       });
 
       console.log(`기존 서버 등록: ${guild.name}`);
@@ -57,20 +57,28 @@ client.once('ready', async () => {
   });
 });
 
-client.on('guildMemberAdd', member => {
-  console.log(member.user.username + " joined");
+client.on('guildMemberAdd', (member) => {
+  console.log(member.user.username + ' joined');
 });
 
-client.login(process.env.TOKEN);
+// 토큰은 항상 환경 변수에서만 읽기
+const TOKEN = process.env.TOKEN;
+if (!TOKEN) {
+  console.error('환경 변수 TOKEN 이 설정되지 않았습니다.');
+} else {
+  client
+    .login(TOKEN)
+    .catch((err) => console.error('Discord 로그인 실패:', err));
+}
 
-// ===== 봇 내부 API 서버 =====
+// ===== 봇 내부 API + 헬스체크용 웹 서버 =====
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 헬스체크 / 상태 확인용 엔드포인트
-app.get("/", (req, res) => {
-  res.send("Bot is alive");
+// 헬스체크 / 상태 확인용 엔드포인트 (PaaS용 필수)
+app.get('/', (req, res) => {
+  res.status(200).send('Bot is alive');
 });
 
 // 역할 목록 요청 (기존 기능 유지)
@@ -80,10 +88,10 @@ app.get('/api/roles/:guildId', async (req, res) => {
     const roles = await guild.roles.fetch();
 
     const roleList = roles
-      .filter(role => role.name !== '@everyone')
-      .map(role => ({
+      .filter((role) => role.name !== '@everyone')
+      .map((role) => ({
         id: role.id,
-        name: role.name
+        name: role.name,
       }));
 
     res.json(roleList);
@@ -93,8 +101,8 @@ app.get('/api/roles/:guildId', async (req, res) => {
   }
 });
 
-// 포트 및 바인딩 (0.0.0.0, 환경변수 우선)
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`봇 API 서버: http://0.0.0.0:${PORT}`);
+// PaaS 환경을 위한 HTTP 서버 (PORT 사용)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Web server listening on port ${PORT}`);
 });
