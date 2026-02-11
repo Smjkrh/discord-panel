@@ -40,7 +40,7 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
   botReady = true;
 
@@ -915,29 +915,114 @@ app.post('/server/:id/kick-bot', async (req, res) => {
 app.get('/invite/:guildId', (req, res) => {
   const guildId = req.params.guildId;
 
-  // REDIRECT_URI 가 ".../callback" 형식이면 같은 도메인의 /invite/callback 으로 리다이렉트
-  let inviteRedirect = '';
-  if (process.env.REDIRECT_URI) {
-    inviteRedirect = process.env.REDIRECT_URI.replace(/\/callback$/, '/invite/callback');
-  }
-
   const inviteUrl =
     `https://discord.com/api/oauth2/authorize` +
     `?client_id=${process.env.CLIENT_ID}` +
     `&permissions=8` +
     `&scope=bot%20applications.commands` +
     `&guild_id=${guildId}` +
-    `&disable_guild_select=true` +
-    (inviteRedirect
-      ? `&redirect_uri=${encodeURIComponent(inviteRedirect)}&response_type=code`
-      : '');
+    `&disable_guild_select=true`;
 
-  res.redirect(inviteUrl);
-});
-
-// 봇 초대 이후 돌아오는 곳: 바로 패널로 이동
-app.get('/invite/callback', (req, res) => {
-  return res.redirect('/panel');
+  // 중간 페이지: 초대 링크를 새 창에서 열고, 완료 후 패널로 돌아가기 안내
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+      <meta charset="UTF-8" />
+      <title>봇 초대</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          min-height: 100vh;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+          color: #e5e7eb;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .container {
+          max-width: 500px;
+          padding: 32px 24px;
+          border-radius: 24px;
+          background: rgba(15, 23, 42, 0.9);
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(148, 163, 184, 0.35);
+          text-align: center;
+        }
+        h1 {
+          margin: 0 0 12px 0;
+          font-size: 24px;
+        }
+        p {
+          margin: 0 0 24px 0;
+          font-size: 14px;
+          color: #9ca3af;
+          line-height: 1.6;
+        }
+        .invite-btn {
+          display: inline-block;
+          padding: 12px 24px;
+          border-radius: 999px;
+          font-size: 15px;
+          font-weight: 600;
+          text-decoration: none;
+          color: #f9fafb;
+          background: linear-gradient(135deg, #5865f2, #4f46e5);
+          box-shadow: 0 18px 40px rgba(88, 101, 242, 0.65), 0 0 0 1px rgba(165, 180, 252, 0.9);
+          margin-bottom: 20px;
+          transition: transform 0.12s ease, box-shadow 0.18s ease;
+        }
+        .invite-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 22px 50px rgba(88, 101, 242, 0.9), 0 0 0 1px rgba(191, 219, 254, 1);
+        }
+        .done-btn {
+          display: inline-block;
+          padding: 10px 20px;
+          border-radius: 999px;
+          font-size: 14px;
+          font-weight: 600;
+          text-decoration: none;
+          color: #f9fafb;
+          background: linear-gradient(135deg, #22c55e, #16a34a);
+          box-shadow: 0 12px 30px rgba(34, 197, 94, 0.55), 0 0 0 1px rgba(74, 222, 128, 0.8);
+          transition: transform 0.12s ease, box-shadow 0.18s ease;
+        }
+        .done-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 16px 35px rgba(34, 197, 94, 0.8), 0 0 0 1px rgba(134, 239, 172, 0.9);
+        }
+        .back-link {
+          display: block;
+          margin-top: 16px;
+          font-size: 13px;
+          color: #9ca3af;
+          text-decoration: none;
+        }
+        .back-link:hover {
+          color: #e5e7eb;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>봇 초대하기</h1>
+        <p>
+          아래 버튼을 클릭하면 디스코드에서 봇 초대 페이지가 열립니다.<br/>
+          초대를 완료한 후, 이 페이지로 돌아와서 "초대 완료" 버튼을 클릭하세요.
+        </p>
+        <a href="${inviteUrl}" target="_blank" class="invite-btn" onclick="window.inviteOpened = true;">
+          디스코드에서 봇 초대하기
+        </a>
+        <div style="margin-top: 24px;">
+          <a href="/panel" class="done-btn">초대 완료 - 패널로 돌아가기</a>
+        </div>
+        <a href="/panel" class="back-link">← 서버 목록으로 돌아가기</a>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 // 역할 목록 요청 (기존 API 엔드포인트 유지)
