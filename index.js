@@ -108,7 +108,7 @@ app.get('/login', (req, res) => {
 // OAuth 콜백
 app.get('/callback', async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.send('로그인 실패');
+  if (!code) return res.status(400).send('로그인 실패: code 누락');
 
   try {
     const tokenRes = await axios.post(
@@ -136,8 +136,16 @@ app.get('/callback', async (req, res) => {
 
     res.redirect('/panel');
   } catch (err) {
-    console.log(err.response?.data || err);
-    res.send('OAuth 오류');
+    const discordError = err.response?.data;
+    console.error('Discord OAuth 오류:', discordError || err);
+
+    if (discordError) {
+      return res.status(500).send(
+        `OAuth 오류<br><pre>${JSON.stringify(discordError, null, 2)}</pre>`,
+      );
+    }
+
+    res.status(500).send('OAuth 오류: 알 수 없는 에러가 발생했습니다.');
   }
 });
 
