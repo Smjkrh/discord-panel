@@ -6,7 +6,7 @@ const axios = require('axios');
 const path = require('path');
 const session = require('express-session');
 
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 
 // ===== 디스코드 봇 클라이언트 =====
 const client = new Client({
@@ -60,8 +60,39 @@ client.once('ready', async () => {
   });
 });
 
-client.on('guildMemberAdd', (member) => {
+client.on('guildMemberAdd', async (member) => {
   console.log(member.user.username + ' joined');
+
+  try {
+    const doc = await db.collection('servers').doc(member.guild.id).get();
+    const data = doc.data();
+    if (!data) return;
+
+    // 자동 역할 지급
+    if (data.autoRole) {
+      const role = member.guild.roles.cache.get(data.autoRole);
+      if (role) {
+        await member.roles.add(role).catch((err) => {
+          console.error('자동 역할 지급 실패:', err);
+        });
+      }
+    }
+
+    // 환영 메시지 전송
+    if (data.welcomeChannel) {
+      const channel = member.guild.channels.cache.get(data.welcomeChannel);
+      if (channel && channel.type === ChannelType.GuildText) {
+        const rawMessage = data.welcomeMessage || '환영합니다!';
+        const content = rawMessage.replace('{user}', `<@${member.id}>`);
+
+        await channel.send({ content }).catch((err) => {
+          console.error('환영 메시지 전송 실패:', err);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('guildMemberAdd 처리 중 오류:', err);
+  }
 });
 
 // 토큰은 항상 환경 변수에서만 읽기
@@ -495,23 +526,180 @@ app.get('/server/:id', async (req, res) => {
   try {
     const guild = await client.guilds.fetch(guildId);
     const roles = await guild.roles.fetch();
+    const channels = await guild.channels.fetch();
 
-    let options = '';
+    let roleOptions = '';
     roles
       .filter((role) => role.name !== '@everyone')
       .forEach((role) => {
         const selected = data.autoRole === role.id ? 'selected' : '';
-        options += `<option value="${role.id}" ${selected}>${role.name}</option>`;
+        roleOptions += `<option value="${role.id}" ${selected}>${role.name}</option>`;
       });
 
+    const textChannels = [];
+    channels.forEach((ch) => {
+      if (ch && ch.type === ChannelType.GuildText) {
+        textChannels.push(ch);
+      }
+    });
+
+    let channelOptions = '<option value="">선택 안 함</option>';
+    textChannels.forEach((ch) => {
+      const selected = data.welcomeChannel === ch.id ? 'selected' : '';
+      channelOptions += `<option value="${ch.id}" ${selected}>#${ch.name}</option>`;
+    });
+
+    const welcomeMessageValue = (data.welcomeMessage || '환영합니다, {user}님!').replace(
+      /"/g,
+      '&quot;',
+    );
+
     res.send(`
-      <h2>자동 역할 설정</h2>
-      <form method="POST" action="/server/${guildId}/autorole">
-        <select name="roleId">
-          ${options}
-        </select>
-        <button type="submit">저장</button>
-      </form>
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${guild.name} - 서버 관리</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 32px 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+          }
+          .panel {
+            width: 100%;
+            max-width: 800px;
+            background: rgba(15, 23, 42, 0.9);
+            border-radius: 24px;
+            padding: 28px 24px 24px;
+            box-shadow:
+              0 20px 60px rgba(0, 0, 0, 0.8),
+              0 0 0 1px rgba(148, 163, 184, 0.35);
+          }
+          h1 {
+            font-size: 22px;
+            margin: 0 0 4px 0;
+          }
+          .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 20px;
+          }
+          .section {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(31, 41, 55, 1);
+          }
+          .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+          }
+          label {
+            display: block;
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+          }
+          select, textarea {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid rgba(55, 65, 81, 1);
+            background: rgba(15, 23, 42, 0.95);
+            color: #e5e7eb;
+            padding: 8px 10px;
+            font-size: 13px;
+            outline: none;
+          }
+          textarea {
+            min-height: 80px;
+            resize: vertical;
+          }
+          select:focus, textarea:focus {
+            border-color: rgba(129, 140, 248, 1);
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7);
+          }
+          .hint {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #6b7280;
+          }
+          .actions {
+            margin-top: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .save-btn {
+            padding: 8px 18px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            box-shadow:
+              0 12px 30px rgba(88, 101, 242, 0.7),
+              0 0 0 1px rgba(165, 180, 252, 0.9);
+          }
+          .save-btn:hover {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+          }
+          .back-link {
+            font-size: 12px;
+            color: #9ca3af;
+            text-decoration: none;
+          }
+          .back-link:hover {
+            color: #e5e7eb;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="panel">
+          <h1>${guild.name} 서버 관리</h1>
+          <div class="subtitle">자동 역할, 환영 채널, 환영 메시지를 설정합니다.</div>
+
+          <form method="POST" action="/server/${guildId}/autorole">
+            <div class="section">
+              <div class="section-title">자동 역할 설정</div>
+              <label for="roleId">서버에 새로 들어온 유저에게 부여할 역할</label>
+              <select id="roleId" name="roleId">
+                <option value="">선택 안 함</option>
+                ${roleOptions}
+              </select>
+              <div class="hint">역할을 선택하면 새 유저가 들어올 때 자동으로 이 역할이 부여됩니다.</div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">환영 채널</div>
+              <label for="welcomeChannel">환영 메시지를 보낼 텍스트 채널</label>
+              <select id="welcomeChannel" name="welcomeChannel">
+                ${channelOptions}
+              </select>
+              <div class="hint">선택 안 함을 고르면 환영 메시지를 보내지 않습니다.</div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">환영 메시지</div>
+              <label for="welcomeMessage">새 유저에게 보낼 메시지</label>
+              <textarea id="welcomeMessage" name="welcomeMessage">${welcomeMessageValue}</textarea>
+              <div class="hint">{user} 를 사용하면 유저 멘션으로 치환됩니다. 예: "환영합니다, {user}님!"</div>
+            </div>
+
+            <div class="actions">
+              <a class="back-link" href="/panel">← 서버 리스트로 돌아가기</a>
+              <button type="submit" class="save-btn">설정 저장</button>
+            </div>
+          </form>
+        </div>
+      </body>
+      </html>
     `);
   } catch (err) {
     console.error(err);
@@ -522,21 +710,29 @@ app.get('/server/:id', async (req, res) => {
 // 자동 역할 POST 저장
 app.post('/server/:id/autorole', async (req, res) => {
   const guildId = req.params.id;
-  const roleId = req.body.roleId;
+  const { roleId, welcomeChannel, welcomeMessage } = req.body;
 
   await db.collection('servers').doc(guildId).set(
     {
-      autoRole: roleId,
+      autoRole: roleId || null,
+      welcomeChannel: welcomeChannel || null,
+      welcomeMessage: welcomeMessage || '환영합니다, {user}님!',
     },
     { merge: true },
   );
 
-  res.send('저장 완료! 이제 새 유저가 들어오면 역할이 지급됩니다.');
+  res.send('저장 완료! 이제 새 유저가 들어오면 역할 및 환영 메시지가 적용됩니다.');
 });
 
 // 길드 선택 후 해당 서버로 봇 초대
 app.get('/invite/:guildId', (req, res) => {
   const guildId = req.params.guildId;
+
+  // REDIRECT_URI 가 ".../callback" 형식이면 같은 도메인의 /invite/callback 으로 리다이렉트
+  let inviteRedirect = '';
+  if (process.env.REDIRECT_URI) {
+    inviteRedirect = process.env.REDIRECT_URI.replace(/\/callback$/, '/invite/callback');
+  }
 
   const inviteUrl =
     `https://discord.com/api/oauth2/authorize` +
@@ -544,9 +740,17 @@ app.get('/invite/:guildId', (req, res) => {
     `&permissions=8` +
     `&scope=bot%20applications.commands` +
     `&guild_id=${guildId}` +
-    `&disable_guild_select=true`;
+    `&disable_guild_select=true` +
+    (inviteRedirect
+      ? `&redirect_uri=${encodeURIComponent(inviteRedirect)}&response_type=code`
+      : '');
 
   res.redirect(inviteUrl);
+});
+
+// 봇 초대 이후 돌아오는 곳: 바로 패널로 이동
+app.get('/invite/callback', (req, res) => {
+  return res.redirect('/panel');
 });
 
 // 역할 목록 요청 (기존 API 엔드포인트 유지)
