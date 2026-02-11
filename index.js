@@ -560,6 +560,35 @@ app.get('/server/:id', async (req, res) => {
       if (fetchErr.message.includes('token') || fetchErr.message.includes('Expected token')) {
         throw new Error(`봇이 아직 로그인되지 않았습니다. 잠시 후 다시 시도해주세요. (원본: ${fetchErr.message})`);
       }
+      // Unknown Guild 에러인 경우 - 봇이 서버에 없음
+      if (fetchErr.message.includes('Unknown Guild') || fetchErr.code === 10004) {
+        return res.status(404).send(`
+          <!DOCTYPE html>
+          <html lang="ko">
+          <head>
+            <meta charset="UTF-8" />
+            <title>서버를 찾을 수 없음</title>
+          </head>
+          <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+            <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+              <h2 style="margin:0 0 8px 0;font-size:20px;">봇이 이 서버에 없습니다</h2>
+              <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+                이 서버에 패널 봇이 초대되어 있지 않거나, 봇이 추방되었습니다.<br/>
+                서버 관리 기능을 사용하려면 먼저 봇을 초대해주세요.
+              </p>
+              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                <a href="/invite/${guildId}" style="display:inline-block;padding:8px 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;color:#f9fafb;background:linear-gradient(135deg,#4f46e5,#6366f1);box-shadow:0 10px 30px rgba(79,70,229,0.55),0 0 0 1px rgba(129,140,248,0.8);">
+                  봇 초대하기
+                </a>
+                <a href="/panel" style="display:inline-block;padding:8px 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;color:#9ca3af;border:1px solid rgba(148,163,184,0.5);">
+                  서버 목록으로
+                </a>
+              </div>
+            </div>
+          </body>
+          </html>
+        `);
+      }
       throw new Error(`서버 정보를 가져올 수 없습니다: ${fetchErr.message}`);
     }
 
