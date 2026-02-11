@@ -174,9 +174,17 @@ app.get('/panel', async (req, res) => {
       }
     });
 
+    // DB 기준으로 "봇이 참가해 있는 서버" 판별 (guildCreate / ready 에서만 기록됨)
+    const joinedServerDocs = await Promise.all(
+      managedGuilds.map((g) => db.collection('servers').doc(g.id).get()),
+    );
+    const joinedServerIdSet = new Set(
+      joinedServerDocs.filter((doc) => doc.exists).map((doc) => doc.id),
+    );
+
     const guildCards = managedGuilds
       .map((guild) => {
-        const botInGuild = client.guilds.cache.has(guild.id);
+        const botInGuild = joinedServerIdSet.has(guild.id);
 
         const actionButton = botInGuild
           ? `<a class="invite-btn manage-btn" href="/server/${guild.id}">이 서버 관리하기</a>`
