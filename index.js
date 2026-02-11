@@ -520,10 +520,34 @@ app.get('/panel', async (req, res) => {
 app.get('/server/:id', async (req, res) => {
   const guildId = req.params.id;
 
-  const doc = await db.collection('servers').doc(guildId).get();
-  const data = doc.data() || {};
-
   try {
+    // 먼저 DB에서 설정값 조회
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    // 봇이 현재 이 서버에 없으면 안내
+    if (!client.guilds.cache.has(guildId)) {
+      return res.send(`
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head>
+          <meta charset="UTF-8" />
+          <title>서버 관리 불가</title>
+        </head>
+        <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+          <div style="max-width:480px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+            <h2 style="margin:0 0 8px 0;font-size:20px;">서버 관리가 불가능합니다</h2>
+            <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+              이 서버에 패널 봇이 현재 초대되어 있지 않거나, 봇이 재시작 중입니다.<br/>
+              다시 초대한 뒤 잠시 후에 시도해주세요.
+            </p>
+            <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
     const guild = await client.guilds.fetch(guildId);
     const roles = await guild.roles.fetch();
     const channels = await guild.channels.fetch();
@@ -702,8 +726,53 @@ app.get('/server/:id', async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('역할 정보를 불러오는 중 오류가 발생했습니다.');
+    const apiError = err.response?.data;
+    console.error('서버 관리 페이지 로딩 오류:', apiError || err);
+
+    // 디스코드에서 Unknown Guild / Missing Access 인 경우
+    if (apiError && (apiError.code === 10004 || apiError.code === 50001)) {
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head>
+          <meta charset="UTF-8" />
+          <title>서버 관리 불가</title>
+        </head>
+        <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+          <div style="max-width:480px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+            <h2 style="margin:0 0 8px 0;font-size:20px;">역할 정보를 불러올 수 없습니다</h2>
+            <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+              디스코드에서 이 서버에 대한 권한이 없다고 응답했습니다.<br/>
+              - 봇이 해당 서버에 초대되어 있는지<br/>
+              - 봇에 필요한 권한(역할 보기/관리)이 있는지<br/>
+              를 확인한 뒤 다시 시도해주세요.
+            </p>
+            <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    // 기타 알 수 없는 오류
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>서버 관리 오류</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">역할 정보를 불러오는 중 오류가 발생했습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            잠시 후 다시 시도해 주세요. 문제가 계속되면 콘솔 로그의 오류 내용을 확인해야 합니다.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 
