@@ -160,15 +160,42 @@ app.get('/panel', async (req, res) => {
       headers: { Authorization: `Bearer ${req.session.access_token}` },
     });
 
-    const guilds = guildRes.data || [];
+    const allGuilds = guildRes.data || [];
 
-    const guildCards = guilds
+    // 관리자/서버 관리 권한이 있는 길드만 필터링
+    const managedGuilds = allGuilds.filter((guild) => {
+      try {
+        const perms = BigInt(guild.permissions ?? '0');
+        const ADMIN = 0x00000008n;
+        const MANAGE_GUILD = 0x00000020n;
+        return guild.owner || (perms & (ADMIN | MANAGE_GUILD)) !== 0n;
+      } catch {
+        return guild.owner === true;
+      }
+    });
+
+    const guildCards = managedGuilds
       .map((guild) => {
+        const botInGuild = client.guilds.cache.has(guild.id);
+
+        const actionButton = botInGuild
+          ? `<a class="invite-btn manage-btn" href="/server/${guild.id}">이 서버 관리하기</a>`
+          : `<a class="invite-btn" href="/invite/${guild.id}">이 서버에 봇 초대</a>`;
+
+        const statusBadge = botInGuild
+          ? '<span class="guild-status guild-status--active">봇 연결됨</span>'
+          : '<span class="guild-status guild-status--inactive">봇 미초대</span>';
+
         return `
         <div class="guild-card">
-          <div class="guild-name">${guild.name}</div>
-          <div class="guild-id">ID: ${guild.id}</div>
-          <a class="invite-btn" href="/invite/${guild.id}">이 서버에 봇 초대</a>
+          <div>
+            <div class="guild-name">${guild.name}</div>
+            <div class="guild-id">ID: ${guild.id}</div>
+          </div>
+          <div class="guild-footer">
+            ${statusBadge}
+            ${actionButton}
+          </div>
         </div>
       `;
       })
@@ -295,6 +322,29 @@ app.get('/panel', async (req, res) => {
             font-size: 11px;
             color: #9ca3af;
           }
+          .guild-footer {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+          .guild-status {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 500;
+          }
+          .guild-status--active {
+            background: rgba(34, 197, 94, 0.12);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+          }
+          .guild-status--inactive {
+            background: rgba(148, 163, 184, 0.12);
+            color: #e5e7eb;
+            border: 1px dashed rgba(148, 163, 184, 0.7);
+          }
           .invite-btn {
             margin-top: 10px;
             display: inline-flex;
@@ -311,6 +361,18 @@ app.get('/panel', async (req, res) => {
               0 10px 30px rgba(79, 70, 229, 0.55),
               0 0 0 1px rgba(129, 140, 248, 0.8);
             transition: background 0.18s ease, transform 0.1s ease, box-shadow 0.18s ease;
+          }
+          .manage-btn {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            box-shadow:
+              0 10px 30px rgba(34, 197, 94, 0.55),
+              0 0 0 1px rgba(74, 222, 128, 0.8);
+          }
+          .manage-btn:hover {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+            box-shadow:
+              0 16px 35px rgba(34, 197, 94, 0.8),
+              0 0 0 1px rgba(134, 239, 172, 0.9);
           }
           .invite-btn:hover {
             background: linear-gradient(135deg, #4338ca, #4f46e5);
