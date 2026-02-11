@@ -22,23 +22,23 @@ const client = new Client({
 let botReady = false;
 
 client.on('guildCreate', async (guild) => {
-  console.log(`새 서버 참가: ${guild.name}`);
-
-  try {
-    await db.collection('servers').doc(guild.id).set({
-      guildName: guild.name,
-      ownerId: guild.ownerId,
-      autoRole: null,
-      welcomeChannel: null,
+    console.log(`새 서버 참가: ${guild.name}`);
+  
+    try {
+      await db.collection('servers').doc(guild.id).set({
+        guildName: guild.name,
+        ownerId: guild.ownerId,
+        autoRole: null,
+        welcomeChannel: null,
       welcomeMessage: '환영합니다!',
       createdAt: new Date(),
-    });
-
+      });
+  
     console.log('DB에 서버 등록 완료');
-  } catch (err) {
+    } catch (err) {
     console.error('DB 저장 실패:', err);
-  }
-});
+    }
+  });
 
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -774,13 +774,14 @@ app.get('/server/:id', async (req, res) => {
               <a class="back-link" href="/panel">← 서버 리스트로 돌아가기</a>
               <div style="display:flex;gap:8px;align-items:center;">
                 <button type="submit" class="save-btn">설정 저장</button>
-                <form method="POST" action="/server/${guildId}/kick-bot" onsubmit="return confirm('정말 이 서버에서 봇을 추방하시겠습니까?');">
-                  <button type="submit" class="save-btn" style="background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 12px 30px rgba(239,68,68,.7),0 0 0 1px rgba(254,202,202,0.9);">
-                    봇 추방하기
-                  </button>
-                </form>
               </div>
             </div>
+          </form>
+
+          <form method="POST" action="/server/${guildId}/kick-bot" onsubmit="return confirm('정말 이 서버에서 봇을 추방하시겠습니까?');" style="margin-top:16px;text-align:right;">
+            <button type="submit" class="save-btn" style="background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 12px 30px rgba(239,68,68,.7),0 0 0 1px rgba(254,202,202,0.9);">
+              봇 추방하기
+            </button>
           </form>
         </div>
       </body>
@@ -908,6 +909,568 @@ app.post('/server/:id/kick-bot', async (req, res) => {
   } catch (err) {
     console.error('봇 추방 실패:', err);
     return res.status(500).send('봇을 추방하는 중 오류가 발생했습니다.');
+  }
+});
+
+// ===== 서버 모더레이션 패널 =====
+app.get('/server/:id/moderation', async (req, res) => {
+  const guildId = req.params.id;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect('/');
+  }
+
+  if (!botReady) {
+    return res.status(503).send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>봇 준비 중</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">봇이 아직 준비되지 않았습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            디스코드 봇이 로그인 중이거나 재시작 중입니다.<br/>
+            잠시 후(약 5-10초) 다시 시도해주세요.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const roles = await guild.roles.fetch();
+
+    let roleOptions = '<option value="">역할 선택</option>';
+    roles
+      .filter((role) => role.name !== '@everyone')
+      .forEach((role) => {
+        roleOptions += `<option value="${role.id}">${role.name}</option>`;
+      });
+
+    // 최근 경고 20개 조회
+    const warningsSnap = await db
+      .collection('servers')
+      .doc(guildId)
+      .collection('warnings')
+      .orderBy('createdAt', 'desc')
+      .limit(20)
+      .get();
+
+    let warningRows = '';
+    warningsSnap.forEach((doc) => {
+      const w = doc.data();
+      let createdAtText = '';
+      if (w.createdAt) {
+        const d = w.createdAt.toDate ? w.createdAt.toDate() : w.createdAt;
+        if (d && d.toISOString) {
+          createdAtText = d.toISOString().replace('T', ' ').slice(0, 16);
+        }
+      }
+      warningRows += `
+        <tr>
+          <td>${w.userId || ''}</td>
+          <td>${w.actorTag || w.actorId || ''}</td>
+          <td>${w.reason || ''}</td>
+          <td>${createdAtText}</td>
+        </tr>
+      `;
+    });
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${guild.name} - 모더레이션 패널</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 24px 12px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+          }
+          .shell {
+            width: 100%;
+            max-width: 1100px;
+            border-radius: 24px;
+            padding: 26px 22px 22px;
+            background: rgba(15, 23, 42, 0.94);
+            box-shadow:
+              0 24px 70px rgba(0, 0, 0, 0.9),
+              0 0 0 1px rgba(30, 64, 175, 0.6);
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 20px;
+          }
+          .title-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+          .title {
+            font-size: 22px;
+            font-weight: 700;
+          }
+          .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+          }
+          .badge {
+            font-size: 11px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.6);
+            color: #9ca3af;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 8px;
+          }
+          .card {
+            border-radius: 18px;
+            padding: 14px 14px 12px;
+            background: radial-gradient(circle at top left, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0.98));
+            border: 1px solid rgba(55, 65, 81, 0.9);
+          }
+          .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+          }
+          .field {
+            margin-bottom: 8px;
+          }
+          label {
+            display: block;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 3px;
+          }
+          input[type="text"], select, textarea {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid rgba(55, 65, 81, 1);
+            background: rgba(15, 23, 42, 0.95);
+            color: #e5e7eb;
+            padding: 7px 9px;
+            font-size: 12px;
+            outline: none;
+          }
+          textarea {
+            min-height: 60px;
+            resize: vertical;
+          }
+          input:focus, select:focus, textarea:focus {
+            border-color: rgba(129, 140, 248, 1);
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7);
+          }
+          .hint {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 2px;
+          }
+          .btn {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 7px 13px;
+            border-radius: 999px;
+            border: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            box-shadow:
+              0 10px 28px rgba(79, 70, 229, 0.7),
+              0 0 0 1px rgba(165, 180, 252, 0.9);
+          }
+          .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            box-shadow:
+              0 10px 28px rgba(239, 68, 68, 0.75),
+              0 0 0 1px rgba(254, 202, 202, 0.9);
+          }
+          .table-wrap {
+            margin-top: 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(31,41,55,1);
+            background: rgba(15, 23, 42, 0.95);
+            overflow: hidden;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+          }
+          th, td {
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(31, 41, 55, 1);
+            text-align: left;
+          }
+          th {
+            background: rgba(15, 23, 42, 1);
+            color: #9ca3af;
+            font-weight: 600;
+            font-size: 11px;
+          }
+          tr:last-child td {
+            border-bottom: none;
+          }
+          .footer-actions {
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #6b7280;
+          }
+          .footer-actions a {
+            color: #9ca3af;
+            text-decoration: none;
+          }
+          .footer-actions a:hover {
+            color: #e5e7eb;
+          }
+          @media (max-width: 720px) {
+            .shell {
+              padding: 20px 16px 18px;
+              border-radius: 20px;
+            }
+            .header {
+              flex-direction: column;
+              align-items: flex-start;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="shell">
+          <div class="header">
+            <div class="title-block">
+              <div class="title">${guild.name} 모더레이션 패널</div>
+              <div class="subtitle">멤버 제재, 경고, 역할 관리를 웹에서 수행합니다.</div>
+            </div>
+            <div class="badge">Guild ID: ${guildId}</div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card-title">킥 / 밴</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="kick" />
+                <div class="field">
+                  <label for="kickUserId">유저 ID</label>
+                  <input id="kickUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="kickReason">사유</label>
+                  <input id="kickReason" name="reason" type="text" placeholder="선택 사항" />
+                </div>
+                <button class="btn" type="submit">유저 킥</button>
+              </form>
+
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+                <input type="hidden" name="action" value="ban" />
+                <div class="field">
+                  <label for="banUserId">유저 ID</label>
+                  <input id="banUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="banReason">사유</label>
+                  <input id="banReason" name="reason" type="text" placeholder="선택 사항" />
+                </div>
+                <button class="btn btn-danger" type="submit">유저 밴</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="card-title">타임아웃 / 뮤트</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="timeout" />
+                <div class="field">
+                  <label for="timeoutUserId">유저 ID</label>
+                  <input id="timeoutUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="timeoutDuration">시간 선택</label>
+                  <select id="timeoutDuration" name="durationMinutes" required>
+                    <option value="5">5분</option>
+                    <option value="10">10분</option>
+                    <option value="30">30분</option>
+                    <option value="60">1시간</option>
+                    <option value="1440">1일</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="timeoutReason">사유</label>
+                  <input id="timeoutReason" name="reason" type="text" placeholder="선택 사항" />
+                </div>
+                <button class="btn" type="submit">타임아웃 적용</button>
+              </form>
+
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+                <input type="hidden" name="action" value="unban" />
+                <div class="field">
+                  <label for="unbanUserId">밴 해제 유저 ID</label>
+                  <input id="unbanUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <button class="btn" type="submit">밴 해제</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="card-title">경고 / 자동 처벌</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="warn" />
+                <div class="field">
+                  <label for="warnUserId">유저 ID</label>
+                  <input id="warnUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="warnReason">경고 사유</label>
+                  <input id="warnReason" name="reason" type="text" placeholder="예: 도배, 욕설 등" />
+                  <div class="hint">경고 3회: 1시간 타임아웃 / 5회: 자동 밴</div>
+                </div>
+                <button class="btn" type="submit">경고 추가</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="card-title">역할 추가 / 제거</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="addRole" />
+                <div class="field">
+                  <label for="addRoleUserId">유저 ID</label>
+                  <input id="addRoleUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="addRoleRoleId">추가할 역할</label>
+                  <select id="addRoleRoleId" name="roleId" required>
+                    ${roleOptions}
+                  </select>
+                </div>
+                <button class="btn" type="submit">역할 추가</button>
+              </form>
+
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+                <input type="hidden" name="action" value="removeRole" />
+                <div class="field">
+                  <label for="removeRoleUserId">유저 ID</label>
+                  <input id="removeRoleUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="removeRoleRoleId">제거할 역할</label>
+                  <select id="removeRoleRoleId" name="roleId" required>
+                    ${roleOptions}
+                  </select>
+                </div>
+                <button class="btn btn-danger" type="submit">역할 제거</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="table-wrap" style="margin-top:22px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:22%;">유저 ID</th>
+                  <th style="width:24%;">처리자</th>
+                  <th>사유</th>
+                  <th style="width:20%;">시간</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${warningRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">최근 경고 기록이 없습니다.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer-actions">
+            <span>경고 3회: 1시간 타임아웃 · 5회: 영구 밴 (자동 적용)</span>
+            <a href="/server/${guildId}">← 기본 서버 설정으로 돌아가기</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('모더레이션 패널 로딩 오류:', err);
+    return res.status(500).send('모더레이션 패널을 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+// 모더레이션 액션 처리
+app.post('/server/:id/moderation/action', async (req, res) => {
+  const guildId = req.params.id;
+  const { action, userId, durationMinutes, reason, roleId } = req.body;
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  if (!userId || !action) {
+    return res.status(400).send('필수 값이 누락되었습니다.');
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    let member = null;
+
+    // 밴/언밴은 멤버가 길드에 없어도 처리 가능
+    if (action !== 'ban' && action !== 'unban') {
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (fetchErr) {
+        throw new Error(`유저를 찾을 수 없습니다: ${fetchErr.message}`);
+      }
+    }
+
+    let resultMessage = '';
+
+    if (action === 'kick') {
+      await member.kick(reason || undefined);
+      resultMessage = `유저 ${userId} 를 킥했습니다.`;
+    } else if (action === 'ban') {
+      await guild.members.ban(userId, { reason: reason || undefined });
+      resultMessage = `유저 ${userId} 를 밴했습니다.`;
+    } else if (action === 'unban') {
+      await guild.members.unban(userId).catch((e) => {
+        throw new Error(`밴 해제 실패: ${e.message}`);
+      });
+      resultMessage = `유저 ${userId} 의 밴을 해제했습니다.`;
+    } else if (action === 'timeout') {
+      const minutes = parseInt(durationMinutes || '0', 10);
+      if (!minutes || minutes <= 0) {
+        throw new Error('유효한 타임아웃 시간을 선택해주세요.');
+      }
+      const ms = minutes * 60 * 1000;
+      // @ts-ignore
+      await member.timeout(ms, reason || undefined);
+      resultMessage = `유저 ${userId} 에게 ${minutes}분 타임아웃을 적용했습니다.`;
+    } else if (action === 'warn') {
+      const actor = req.session?.user;
+      const now = new Date();
+      await db
+        .collection('servers')
+        .doc(guildId)
+        .collection('warnings')
+        .add({
+          userId,
+          reason: reason || null,
+          actorId: actor?.id || null,
+          actorTag: actor ? `${actor.username}#${actor.discriminator}` : null,
+          createdAt: now,
+        });
+
+      // 현재 경고 횟수 조회
+      const warnsSnap = await db
+        .collection('servers')
+        .doc(guildId)
+        .collection('warnings')
+        .where('userId', '==', userId)
+        .get();
+      const warnCount = warnsSnap.size;
+
+      resultMessage = `유저 ${userId} 에게 경고를 1회 추가했습니다. (총 ${warnCount}회)`;
+
+      // 자동 처벌: 3회 => 1시간 타임아웃, 5회 => 밴
+      if (warnCount === 3) {
+        try {
+          if (!member) {
+            member = await guild.members.fetch(userId);
+          }
+          // @ts-ignore
+          await member.timeout(60 * 60 * 1000, '자동 제재: 경고 3회 누적');
+          resultMessage += '\n자동 제재: 1시간 타임아웃 적용됨.';
+        } catch (autoErr) {
+          console.error('자동 타임아웃 실패:', autoErr);
+          resultMessage += '\n자동 타임아웃 적용 실패 (권한 혹은 상태 문제).';
+        }
+      } else if (warnCount === 5) {
+        try {
+          await guild.members.ban(userId, {
+            reason: '자동 제재: 경고 5회 누적',
+          });
+          resultMessage += '\n자동 제재: 유저 밴 적용됨.';
+        } catch (autoBanErr) {
+          console.error('자동 밴 실패:', autoBanErr);
+          resultMessage += '\n자동 밴 적용 실패 (권한 혹은 상태 문제).';
+        }
+      }
+    } else if (action === 'addRole') {
+      if (!roleId) {
+        throw new Error('추가할 역할을 선택해주세요.');
+      }
+      const role = guild.roles.cache.get(roleId);
+      if (!role) {
+        throw new Error('해당 역할을 찾을 수 없습니다.');
+      }
+      await member.roles.add(role);
+      resultMessage = `유저 ${userId} 에게 역할 "${role.name}" 을(를) 추가했습니다.`;
+    } else if (action === 'removeRole') {
+      if (!roleId) {
+        throw new Error('제거할 역할을 선택해주세요.');
+      }
+      const role = guild.roles.cache.get(roleId);
+      if (!role) {
+        throw new Error('해당 역할을 찾을 수 없습니다.');
+      }
+      await member.roles.remove(role);
+      resultMessage = `유저 ${userId} 에서 역할 "${role.name}" 을(를) 제거했습니다.`;
+    } else {
+      throw new Error('지원하지 않는 액션입니다.');
+    }
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>모더레이션 결과</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);white-space:pre-line;">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">모더레이션 작업 완료</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">${resultMessage}</p>
+          <a href="/server/${guildId}/moderation" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 모더레이션 패널로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('모더레이션 액션 오류:', err);
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>모더레이션 오류</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">모더레이션 작업 중 오류가 발생했습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            ${err.message || String(err)}
+          </p>
+          <a href="/server/${guildId}/moderation" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 모더레이션 패널로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 
