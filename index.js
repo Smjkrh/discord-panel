@@ -443,7 +443,11 @@ app.get('/panel', async (req, res) => {
           <div class="guild-grid">
             ${guildCards || ''}
           </div>
-          ${guilds.length === 0 ? `<div class="empty-state">표시할 서버가 없습니다. 디스코드에서 서버를 먼저 만들어 주세요.</div>` : ''}
+          ${
+            managedGuilds.length === 0
+              ? `<div class="empty-state">표시할 서버가 없습니다. 디스코드에서 관리자 권한이 있는 서버만 표시됩니다.</div>`
+              : ''
+          }
 
           <div class="footer">
             <span class="brand-mark">Discord Panel</span>
