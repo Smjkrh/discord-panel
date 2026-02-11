@@ -454,8 +454,22 @@ app.get('/panel', async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error(err.response?.data || err);
-    res.status(500).send('패널 정보를 불러오는 중 오류가 발생했습니다.');
+    const apiError = err.response?.data;
+    console.error('패널 길드 목록 로딩 오류:', apiError || err);
+
+    if (apiError) {
+      return res
+        .status(500)
+        .send(
+          `패널 정보를 불러오는 중 오류가 발생했습니다.<br><pre>${JSON.stringify(
+            apiError,
+            null,
+            2,
+          )}</pre>`,
+        );
+    }
+
+    res.status(500).send('패널 정보를 불러오는 중 알 수 없는 오류가 발생했습니다.');
   }
 });
 
