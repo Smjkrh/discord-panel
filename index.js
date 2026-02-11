@@ -525,29 +525,6 @@ app.get('/server/:id', async (req, res) => {
     const doc = await db.collection('servers').doc(guildId).get();
     const data = doc.data() || {};
 
-    // 봇이 현재 이 서버에 없으면 안내
-    if (!client.guilds.cache.has(guildId)) {
-      return res.send(`
-        <!DOCTYPE html>
-        <html lang="ko">
-        <head>
-          <meta charset="UTF-8" />
-          <title>서버 관리 불가</title>
-        </head>
-        <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
-          <div style="max-width:480px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
-            <h2 style="margin:0 0 8px 0;font-size:20px;">서버 관리가 불가능합니다</h2>
-            <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
-              이 서버에 패널 봇이 현재 초대되어 있지 않거나, 봇이 재시작 중입니다.<br/>
-              다시 초대한 뒤 잠시 후에 시도해주세요.
-            </p>
-            <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
-          </div>
-        </body>
-        </html>
-      `);
-    }
-
     const guild = await client.guilds.fetch(guildId);
     const roles = await guild.roles.fetch();
     const channels = await guild.channels.fetch();
@@ -718,7 +695,14 @@ app.get('/server/:id', async (req, res) => {
 
             <div class="actions">
               <a class="back-link" href="/panel">← 서버 리스트로 돌아가기</a>
-              <button type="submit" class="save-btn">설정 저장</button>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button type="submit" class="save-btn">설정 저장</button>
+                <form method="POST" action="/server/${guildId}/kick-bot" onsubmit="return confirm('정말 이 서버에서 봇을 추방하시겠습니까?');">
+                  <button type="submit" class="save-btn" style="background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 12px 30px rgba(239,68,68,.7),0 0 0 1px rgba(254,202,202,0.9);">
+                    봇 추방하기
+                  </button>
+                </form>
+              </div>
             </div>
           </form>
         </div>
@@ -791,6 +775,39 @@ app.post('/server/:id/autorole', async (req, res) => {
   );
 
   res.send('저장 완료! 이제 새 유저가 들어오면 역할 및 환영 메시지가 적용됩니다.');
+});
+
+// 서버에서 봇 추방하기
+app.post('/server/:id/kick-bot', async (req, res) => {
+  const guildId = req.params.id;
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+
+    await guild.leave();
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>봇 추방 완료</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:480px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">봇을 서버에서 추방했습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            서버 리스트에서 더 이상 이 서버는 "봇 연결됨" 상태로 표시되지 않습니다.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('봇 추방 실패:', err);
+    return res.status(500).send('봇을 추방하는 중 오류가 발생했습니다.');
+  }
 });
 
 // 길드 선택 후 해당 서버로 봇 초대
