@@ -474,7 +474,7 @@ app.get('/api/roles/:guildId', async (req, res) => {
 });
 
 // PaaS 환경을 위한 HTTP 서버 (PORT 사용)
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Web server listening on port ${PORT}`);
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`웹 서버 실행됨: ${PORT}`);
 });
