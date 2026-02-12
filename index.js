@@ -6,7 +6,7 @@ const axios = require('axios');
 const path = require('path');
 const session = require('express-session');
 
-const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits } = require('discord.js');
 
 // ===== 디스코드 봇 클라이언트 =====
 const client = new Client({
@@ -1703,6 +1703,75 @@ app.get('/server/:id/moderation', async (req, res) => {
             </div>
 
             <div class="card">
+              <div class="card-title">역할 / 채널 생성 · 권한</div>
+
+              <div class="card-subtitle">역할 생성</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="createRole" />
+                <div class="field">
+                  <label for="roleName">역할 이름</label>
+                  <input id="roleName" name="roleName" type="text" placeholder="예: 관리자" required />
+                </div>
+                <div class="field">
+                  <label for="roleColor">색상 (선택, HEX)</label>
+                  <input id="roleColor" name="roleColor" type="text" placeholder="#5865F2" />
+                </div>
+                <label style="font-size:11px;color:#9ca3af;margin-top:4px;">
+                  <input type="checkbox" name="roleAdmin" value="1" />
+                  관리자 역할로 만들기 (Administrator 권한 부여)
+                </label>
+                <div class="hint">강력한 권한이므로 신중하게 사용하세요.</div>
+                <button class="btn" type="submit">역할 생성</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">채널 생성</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="createChannel" />
+                <div class="field">
+                  <label for="channelName">채널 이름</label>
+                  <input id="channelName" name="channelName" type="text" placeholder="예: 새-채팅" required />
+                </div>
+                <div class="field">
+                  <label for="channelType">채널 종류</label>
+                  <select id="channelType" name="channelType">
+                    <option value="text">텍스트 채널</option>
+                    <option value="voice">음성 채널</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="channelCategoryId">카테고리 ID (선택)</label>
+                  <input id="channelCategoryId" name="channelCategoryId" type="text" placeholder="예: 123456789012345678" />
+                  <div class="hint">해당 카테고리 아래에 채널이 생성됩니다. 비워두면 루트에 생성됩니다.</div>
+                </div>
+                <button class="btn" type="submit">채널 생성</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">채널 권한 설정</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="setChannelPerms" />
+                <div class="field">
+                  <label for="permChannelId">채널 ID</label>
+                  <input id="permChannelId" name="permChannelId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="permRoleId">대상 역할 ID</label>
+                  <input id="permRoleId" name="permRoleId" type="text" placeholder="예: 123456789012345678" required />
+                  <div class="hint">예: @everyone 역할 ID를 넣으면 전체 공개/비공개를 제어할 수 있습니다.</div>
+                </div>
+                <div class="field">
+                  <label>보기 / 쓰기 권한</label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px;">
+                    <input type="checkbox" name="permView" value="1" /> 채널 보기 허용 (체크 해제시 숨김)
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permSend" value="1" /> 메시지 보내기 허용 (체크 해제시 읽기 전용)
+                  </label>
+                </div>
+                <button class="btn" type="submit">권한 적용</button>
+              </form>
+            </div>
+
+            <div class="card">
               <div class="card-title">서버 / 유저 이름 변경</div>
 
               <div class="card-subtitle">서버 이름 변경</div>
@@ -1740,6 +1809,70 @@ app.get('/server/:id/moderation', async (req, res) => {
                 </div>
                 <button class="btn" type="submit">닉네임 변경</button>
               </form>
+            </div>
+
+            <div class="card">
+              <div class="card-title">이모지 / 스티커 관리</div>
+
+              <div class="card-subtitle">이모지 추가</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="addEmoji" />
+                <div class="field">
+                  <label for="emojiName">이모지 이름</label>
+                  <input id="emojiName" name="emojiName" type="text" placeholder="예: happy_face" required />
+                </div>
+                <div class="field">
+                  <label for="emojiUrl">이모지 이미지 URL</label>
+                  <input id="emojiUrl" name="emojiUrl" type="text" placeholder="https://example.com/emoji.png" required />
+                  <div class="hint">정사각형 PNG/GIF 이미지 링크를 넣어주세요. Manage Emojis and Stickers 권한이 필요합니다.</div>
+                </div>
+                <button class="btn" type="submit">이모지 추가</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">이모지 제거</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="removeEmoji" />
+                <div class="field">
+                  <label for="emojiId">이모지 ID</label>
+                  <input id="emojiId" name="emojiId" type="text" placeholder="예: 123456789012345678" required />
+                  <div class="hint">이모지를 우클릭 → 링크 복사에서 ID를 확인할 수 있습니다.</div>
+                </div>
+                <button class="btn btn-danger" type="submit">이모지 제거</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">스티커 추가</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="addSticker" />
+                <div class="field">
+                  <label for="stickerName">스티커 이름</label>
+                  <input id="stickerName" name="stickerName" type="text" placeholder="예: cool_sticker" required />
+                </div>
+                <div class="field">
+                  <label for="stickerTags">태그 (쉼표로 구분, 최소 1개)</label>
+                  <input id="stickerTags" name="stickerTags" type="text" placeholder="예: 😀, fun" required />
+                  <div class="hint">Discord 요구사항상 최소 한 개의 관련 이모지/단어 태그가 필요합니다.</div>
+                </div>
+                <div class="field">
+                  <label for="stickerUrl">스티커 이미지 URL</label>
+                  <input id="stickerUrl" name="stickerUrl" type="text" placeholder="PNG/APNG 이미지 URL" required />
+                  <div class="hint">Static PNG/APNG 이미지만 지원합니다. 용량/해상도 제한을 지켜주세요.</div>
+                </div>
+                <button class="btn" type="submit">스티커 추가</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">스티커 제거</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="removeSticker" />
+                <div class="field">
+                  <label for="stickerId">스티커 ID</label>
+                  <input id="stickerId" name="stickerId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <button class="btn btn-danger" type="submit">스티커 제거</button>
+              </form>
+
+              <div class="hint" style="margin-top:8px;">
+                ⚠️ 사운드보드 관리 기능은 현재 Discord 공식 API 지원이 제한적이라, 패널에서 직접 추가/삭제할 수 없습니다.
+              </div>
             </div>
           </div>
 
@@ -1855,7 +1988,33 @@ app.get('/server/:id/moderation', async (req, res) => {
 // 모더레이션 액션 처리
 app.post('/server/:id/moderation/action', async (req, res) => {
   const guildId = req.params.id;
-  const { action, userId, durationMinutes, reason, roleId, guildName, iconUrl, nickname } = req.body;
+  const {
+    action,
+    userId,
+    durationMinutes,
+    reason,
+    roleId,
+    guildName,
+    iconUrl,
+    nickname,
+    emojiName,
+    emojiUrl,
+    emojiId,
+    stickerName,
+    stickerTags,
+    stickerUrl,
+    stickerId,
+    roleName,
+    roleColor,
+    roleAdmin,
+    channelName,
+    channelType,
+    channelCategoryId,
+    permChannelId,
+    permRoleId,
+    permView,
+    permSend,
+  } = req.body;
 
   if (!botReady) {
     return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
@@ -1928,6 +2087,111 @@ app.post('/server/:id/moderation/action', async (req, res) => {
       resultMessage = newNick
         ? `유저 ${userId} 의 닉네임을 "${newNick}" 으로 변경했습니다.`
         : `유저 ${userId} 의 닉네임을 초기화했습니다.`;
+    } else if (action === 'addEmoji') {
+      const name = (emojiName || '').trim();
+      const url = (emojiUrl || '').trim();
+      if (!name || !url) {
+        throw new Error('이모지 이름과 이미지를 모두 입력해주세요.');
+      }
+      const emoji = await guild.emojis.create({ name, attachment: url });
+      resultMessage = `이모지 "${emoji.name}" (${emoji.id}) 를 추가했습니다.`;
+    } else if (action === 'removeEmoji') {
+      const id = (emojiId || '').trim();
+      if (!id) {
+        throw new Error('이모지 ID를 입력해주세요.');
+      }
+      await guild.emojis.delete(id);
+      resultMessage = `이모지 ${id} 를 제거했습니다.`;
+    } else if (action === 'addSticker') {
+      const name = (stickerName || '').trim();
+      const tagsRaw = (stickerTags || '').trim();
+      const url = (stickerUrl || '').trim();
+      if (!name || !tagsRaw || !url) {
+        throw new Error('스티커 이름 / 태그 / 이미지를 모두 입력해주세요.');
+      }
+      const tags = tagsRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .join(', ');
+      if (!tags) {
+        throw new Error('최소 한 개 이상의 태그가 필요합니다.');
+      }
+      // 이미지를 가져와서 버퍼로 변환
+      const imgRes = await axios.get(url, { responseType: 'arraybuffer' });
+      const file = Buffer.from(imgRes.data);
+      const sticker = await guild.stickers.create({
+        file,
+        name,
+        tags,
+      });
+      resultMessage = `스티커 "${sticker.name}" (${sticker.id}) 를 추가했습니다.`;
+    } else if (action === 'removeSticker') {
+      const id = (stickerId || '').trim();
+      if (!id) {
+        throw new Error('스티커 ID를 입력해주세요.');
+      }
+      await guild.stickers.delete(id);
+      resultMessage = `스티커 ${id} 를 제거했습니다.`;
+    } else if (action === 'createRole') {
+      const name = (roleName || '').trim();
+      if (!name) {
+        throw new Error('역할 이름을 입력해주세요.');
+      }
+      const color = (roleColor || '').trim();
+      const isAdmin = !!roleAdmin;
+
+      const data = {
+        name,
+      };
+      if (color) {
+        data.color = color;
+      }
+      if (isAdmin) {
+        data.permissions = [PermissionFlagsBits.Administrator];
+      }
+
+      const role = await guild.roles.create(data);
+      resultMessage = `역할 "${role.name}" (${role.id}) 를 생성했습니다.${
+        isAdmin ? '\n⚠️ 관리자 권한이 부여되었습니다.' : ''
+      }`;
+    } else if (action === 'createChannel') {
+      const name = (channelName || '').trim();
+      const typeStr = (channelType || 'text').toLowerCase();
+      if (!name) {
+        throw new Error('채널 이름을 입력해주세요.');
+      }
+      let type = ChannelType.GuildText;
+      if (typeStr === 'voice') type = ChannelType.GuildVoice;
+
+      const options = { name, type };
+      const categoryId = (channelCategoryId || '').trim();
+      if (categoryId) {
+        options.parent = categoryId;
+      }
+
+      const channel = await guild.channels.create(options);
+      resultMessage = `채널 "${channel.name}" (${channel.id}) 를 생성했습니다.`;
+    } else if (action === 'setChannelPerms') {
+      const chId = (permChannelId || '').trim();
+      const rId = (permRoleId || '').trim();
+      if (!chId || !rId) {
+        throw new Error('채널 ID와 역할 ID를 모두 입력해주세요.');
+      }
+      const channel = await guild.channels.fetch(chId);
+      if (!channel) {
+        throw new Error('해당 채널을 찾을 수 없습니다.');
+      }
+
+      const allowView = permView === '1';
+      const allowSend = permSend === '1';
+
+      const perms = {};
+      if (permView !== undefined) perms.ViewChannel = allowView;
+      if (permSend !== undefined) perms.SendMessages = allowSend;
+
+      await channel.permissionOverwrites.edit(rId, perms);
+      resultMessage = `채널 ${chId} 에서 역할 ${rId} 의 권한을 업데이트했습니다.`;
     } else if (action === 'warn') {
       const actor = req.session?.user;
       const now = new Date();
