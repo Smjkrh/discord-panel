@@ -952,6 +952,7 @@ app.get('/server/:id/moderation', async (req, res) => {
   try {
     const guild = await client.guilds.fetch(guildId);
     const roles = await guild.roles.fetch();
+    const members = await guild.members.fetch();
 
     let roleOptions = '<option value="">역할 선택</option>';
     roles
@@ -985,6 +986,35 @@ app.get('/server/:id/moderation', async (req, res) => {
           <td>${w.actorTag || w.actorId || ''}</td>
           <td>${w.reason || ''}</td>
           <td>${createdAtText}</td>
+        </tr>
+      `;
+    });
+
+    // 멤버 리스트 (최대 50명)
+    const memberArray = Array.from(members.values()).sort((a, b) => {
+      const aj = a.joinedTimestamp || 0;
+      const bj = b.joinedTimestamp || 0;
+      return bj - aj;
+    }).slice(0, 50);
+
+    let memberRows = '';
+    memberArray.forEach((m) => {
+      const user = m.user;
+      const tag =
+        user.discriminator === '0'
+          ? user.username
+          : `${user.username}#${user.discriminator}`;
+      const display = m.nickname || user.globalName || user.username;
+      memberRows += `
+        <tr>
+          <td>${display}</td>
+          <td>${tag}</td>
+          <td>${user.id}</td>
+          <td>
+            <button type="button" class="btn" style="padding:4px 10px;font-size:11px;" onclick="selectUser('${user.id}', '${display.replace(/'/g, "\\'")}')">
+              선택
+            </button>
+          </td>
         </tr>
       `;
     });
@@ -1306,11 +1336,49 @@ app.get('/server/:id/moderation', async (req, res) => {
             </table>
           </div>
 
+          <div class="table-wrap" style="margin-top:18px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>닉네임 / 이름</th>
+                  <th>태그</th>
+                  <th style="width:26%;">유저 ID</th>
+                  <th style="width:14%;">선택</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${memberRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">표시할 멤버가 없습니다.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
           <div class="footer-actions">
             <span>경고 3회: 1시간 타임아웃 · 5회: 영구 밴 (자동 적용)</span>
             <a href="/server/${guildId}">← 기본 서버 설정으로 돌아가기</a>
           </div>
         </div>
+        <script>
+          function selectUser(id, label) {
+            try {
+              const fields = [
+                'kickUserId',
+                'banUserId',
+                'timeoutUserId',
+                'unbanUserId',
+                'warnUserId',
+                'addRoleUserId',
+                'removeRoleUserId',
+              ];
+              fields.forEach(function (fid) {
+                var el = document.getElementById(fid);
+                if (el) el.value = id;
+              });
+              alert('선택된 유저: ' + label + ' (' + id + ')');
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        </script>
       </body>
       </html>
     `);
