@@ -774,6 +774,13 @@ app.get('/server/:id', async (req, res) => {
               <a class="back-link" href="/panel">← 서버 리스트로 돌아가기</a>
               <div style="display:flex;gap:8px;align-items:center;">
                 <button type="submit" class="save-btn">설정 저장</button>
+                <a
+                  href="/server/${guildId}/moderation"
+                  class="save-btn"
+                  style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;"
+                >
+                  모더레이션 패널
+                </a>
               </div>
             </div>
           </form>
