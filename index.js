@@ -952,7 +952,16 @@ app.get('/server/:id/moderation', async (req, res) => {
   try {
     const guild = await client.guilds.fetch(guildId);
     const roles = await guild.roles.fetch();
-    const members = await guild.members.fetch();
+
+    // 멤버 전체를 한 번에 가져오면 게이트웨이 레이트리밋(opcode 8)에 걸릴 수 있으므로
+    // 최대 50명까지만 청크로 가져오고, 실패 시 캐시만 사용
+    let members;
+    try {
+      members = await guild.members.fetch({ limit: 50 });
+    } catch (chunkErr) {
+      console.error('멤버 목록 청크 로딩 실패, 캐시로 대체:', chunkErr);
+      members = guild.members.cache;
+    }
 
     let roleOptions = '<option value="">역할 선택</option>';
     roles
@@ -991,11 +1000,13 @@ app.get('/server/:id/moderation', async (req, res) => {
     });
 
     // 멤버 리스트 (최대 50명)
-    const memberArray = Array.from(members.values()).sort((a, b) => {
-      const aj = a.joinedTimestamp || 0;
-      const bj = b.joinedTimestamp || 0;
-      return bj - aj;
-    }).slice(0, 50);
+    const memberArray = Array.from(members.values())
+      .sort((a, b) => {
+        const aj = a.joinedTimestamp || 0;
+        const bj = b.joinedTimestamp || 0;
+        return bj - aj;
+      })
+      .slice(0, 50);
 
     let memberRows = '';
     memberArray.forEach((m) => {
@@ -1148,6 +1159,12 @@ app.get('/server/:id/moderation', async (req, res) => {
             border: 1px solid rgba(31,41,55,1);
             background: rgba(15, 23, 42, 0.95);
             overflow: hidden;
+          }
+          .tables-layout {
+            margin-top: 22px;
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+            gap: 16px;
           }
           table {
             width: 100%;
@@ -1320,36 +1337,51 @@ app.get('/server/:id/moderation', async (req, res) => {
             </div>
           </div>
 
-          <div class="table-wrap" style="margin-top:22px;">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width:22%;">유저 ID</th>
-                  <th style="width:24%;">처리자</th>
-                  <th>사유</th>
-                  <th style="width:20%;">시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${warningRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">최근 경고 기록이 없습니다.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
+          <div class="tables-layout">
+            <div class="table-wrap">
+              <div style="padding:10px 10px 0;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <div style="font-size:12px;font-weight:600;color:#e5e7eb;">서버 멤버 목록</div>
+                <div style="font-size:11px;color:#6b7280;">최대 50명 · 닉네임 / 태그 / ID 검색</div>
+              </div>
+              <div style="padding:0 10px 6px;">
+                <input
+                  id="memberSearch"
+                  type="text"
+                  placeholder="유저 검색..."
+                  style="width:100%;margin-top:6px;border-radius:999px;border:1px solid rgba(55,65,81,1);background:#020617;color:#e5e7eb;padding:6px 10px;font-size:11px;outline:none;"
+                  oninput="filterMembers()"
+                />
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>닉네임 / 이름</th>
+                    <th>태그</th>
+                    <th style="width:26%;">유저 ID</th>
+                    <th style="width:14%;">선택</th>
+                  </tr>
+                </thead>
+                <tbody id="memberTableBody">
+                  ${memberRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">표시할 멤버가 없습니다.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
 
-          <div class="table-wrap" style="margin-top:18px;">
-            <table>
-              <thead>
-                <tr>
-                  <th>닉네임 / 이름</th>
-                  <th>태그</th>
-                  <th style="width:26%;">유저 ID</th>
-                  <th style="width:14%;">선택</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${memberRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">표시할 멤버가 없습니다.</td></tr>'}
-              </tbody>
-            </table>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:22%;">유저 ID</th>
+                    <th style="width:24%;">처리자</th>
+                    <th>사유</th>
+                    <th style="width:20%;">시간</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${warningRows || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px 0;">최근 경고 기록이 없습니다.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="footer-actions">
@@ -1374,6 +1406,31 @@ app.get('/server/:id/moderation', async (req, res) => {
                 if (el) el.value = id;
               });
               alert('선택된 유저: ' + label + ' (' + id + ')');
+            } catch (e) {
+              console.error(e);
+            }
+          }
+
+          function filterMembers() {
+            try {
+              var input = document.getElementById('memberSearch');
+              if (!input) return;
+              var filter = input.value.toLowerCase();
+              var body = document.getElementById('memberTableBody');
+              if (!body) return;
+              var rows = body.getElementsByTagName('tr');
+              for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].getElementsByTagName('td');
+                if (!cells.length) continue;
+                var text =
+                  (cells[0].innerText || '') +
+                  ' ' +
+                  (cells[1].innerText || '') +
+                  ' ' +
+                  (cells[2].innerText || '');
+                text = text.toLowerCase();
+                rows[i].style.display = filter === '' || text.indexOf(filter) !== -1 ? '' : 'none';
+              }
             } catch (e) {
               console.error(e);
             }
