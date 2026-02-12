@@ -1759,12 +1759,33 @@ app.get('/server/:id/moderation', async (req, res) => {
                   <div class="hint">예: @everyone 역할 ID를 넣으면 전체 공개/비공개를 제어할 수 있습니다.</div>
                 </div>
                 <div class="field">
-                  <label>보기 / 쓰기 권한</label>
+                  <label>채널 권한 (간단 설정)</label>
                   <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px;">
                     <input type="checkbox" name="permView" value="1" /> 채널 보기 허용 (체크 해제시 숨김)
                   </label>
                   <label style="font-size:11px;color:#9ca3af;display:block;">
                     <input type="checkbox" name="permSend" value="1" /> 메시지 보내기 허용 (체크 해제시 읽기 전용)
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;margin-top:4px;">
+                    <input type="checkbox" name="permManageMessages" value="1" /> 메시지 관리 허용 (삭제/고정 등)
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permAttach" value="1" /> 파일 첨부 허용
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permEmbed" value="1" /> 링크 임베드 허용
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permReact" value="1" /> 리액션 추가 허용
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permUseCmds" value="1" /> 슬래시 커맨드 사용 허용
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;margin-top:4px;">
+                    <input type="checkbox" name="permConnect" value="1" /> (음성 채널) 접속 허용
+                  </label>
+                  <label style="font-size:11px;color:#9ca3af;display:block;">
+                    <input type="checkbox" name="permSpeak" value="1" /> (음성 채널) 발언 허용
                   </label>
                 </div>
                 <button class="btn" type="submit">권한 적용</button>
@@ -2014,6 +2035,13 @@ app.post('/server/:id/moderation/action', async (req, res) => {
     permRoleId,
     permView,
     permSend,
+    permManageMessages,
+    permAttach,
+    permEmbed,
+    permReact,
+    permUseCmds,
+    permConnect,
+    permSpeak,
   } = req.body;
 
   if (!botReady) {
@@ -2185,10 +2213,24 @@ app.post('/server/:id/moderation/action', async (req, res) => {
 
       const allowView = permView === '1';
       const allowSend = permSend === '1';
+      const allowManage = permManageMessages === '1';
+      const allowAttachFiles = permAttach === '1';
+      const allowEmbedLinks = permEmbed === '1';
+      const allowReact = permReact === '1';
+      const allowUseCmds = permUseCmds === '1';
+      const allowConnect = permConnect === '1';
+      const allowSpeak = permSpeak === '1';
 
       const perms = {};
       if (permView !== undefined) perms.ViewChannel = allowView;
       if (permSend !== undefined) perms.SendMessages = allowSend;
+      if (permManageMessages !== undefined) perms.ManageMessages = allowManage;
+      if (permAttach !== undefined) perms.AttachFiles = allowAttachFiles;
+      if (permEmbed !== undefined) perms.EmbedLinks = allowEmbedLinks;
+      if (permReact !== undefined) perms.AddReactions = allowReact;
+      if (permUseCmds !== undefined) perms.UseApplicationCommands = allowUseCmds;
+      if (permConnect !== undefined) perms.Connect = allowConnect;
+      if (permSpeak !== undefined) perms.Speak = allowSpeak;
 
       await channel.permissionOverwrites.edit(rId, perms);
       resultMessage = `채널 ${chId} 에서 역할 ${rId} 의 권한을 업데이트했습니다.`;
