@@ -99,6 +99,72 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
+// 욕설 / 링크 필터링
+client.on('messageCreate', async (message) => {
+  try {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    const doc = await db.collection('servers').doc(message.guild.id).get();
+    const data = doc.data();
+    if (!data) return;
+
+    const content = message.content || '';
+    const lower = content.toLowerCase();
+
+    // 욕설 필터
+    if (Array.isArray(data.badWords) && data.badWords.length > 0) {
+      const hasBad = data.badWords.some((w) => w && lower.includes(String(w).toLowerCase()));
+      if (hasBad) {
+        await message.delete().catch(() => {});
+        return;
+      }
+    }
+
+    // 링크 필터
+    if (data.blockLinks) {
+      const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+      const urls = content.match(urlRegex);
+      if (urls && urls.length > 0) {
+        const whitelist = Array.isArray(data.linkWhitelist)
+          ? data.linkWhitelist.map((d) => String(d).toLowerCase())
+          : [];
+
+        let blocked = false;
+
+        for (const raw of urls) {
+          let href = raw;
+          if (!/^https?:\/\//i.test(href)) {
+            href = 'http://' + href;
+          }
+          try {
+            const u = new URL(href);
+            const host = u.hostname.toLowerCase();
+            const allowed =
+              whitelist.length === 0
+                ? false
+                : whitelist.some((d) => host === d || host.endsWith('.' + d));
+            if (!allowed) {
+              blocked = true;
+              break;
+            }
+          } catch {
+            blocked = true;
+            break;
+          }
+        }
+
+        if (blocked) {
+          await message.delete().catch(() => {});
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('messageCreate 필터 처리 중 오류:', err);
+  }
+});
+
 // 토큰은 항상 환경 변수에서만 읽기
 const TOKEN = process.env.TOKEN;
 if (!TOKEN) {
@@ -126,6 +192,191 @@ app.use(express.static(path.join(__dirname, 'views')));
 // 메인 페이지: 고급 로그인 UI
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'login.html'));
+});
+
+// 규칙 동의 / 인증 페이지
+app.get('/verify/:guildId', async (req, res) => {
+  const guildId = req.params.guildId;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect(
+      `/login?from=${encodeURIComponent(`/verify/${guildId}`)}`,
+    );
+  }
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    if (!data.verifyRole) {
+      return res.send('관리자가 아직 인증 역할을 설정하지 않았습니다.');
+    }
+
+    const rulesHtml = (data.rulesText || '서버 규칙을 읽고 동의해 주세요.')
+      .replace(/\n/g, '<br/>');
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>서버 인증 - ${guildId}</title>
+        <style>
+          body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+            color: #e5e7eb;
+          }
+          .panel {
+            max-width: 560px;
+            width: 100%;
+            padding: 26px 22px 22px;
+            border-radius: 24px;
+            background: rgba(15, 23, 42, 0.95);
+            box-shadow:
+              0 20px 60px rgba(0, 0, 0, 0.9),
+              0 0 0 1px rgba(148, 163, 184, 0.35);
+          }
+          h1 {
+            margin: 0 0 10px;
+            font-size: 22px;
+          }
+          .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 18px;
+          }
+          .rules {
+            font-size: 13px;
+            line-height: 1.6;
+            padding: 12px 12px;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 1);
+            border: 1px solid rgba(31, 41, 55, 1);
+            max-height: 260px;
+            overflow-y: auto;
+          }
+          .actions {
+            margin-top: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #9ca3af;
+          }
+          .btn {
+            padding: 8px 18px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            box-shadow:
+              0 12px 30px rgba(34, 197, 94, 0.7),
+              0 0 0 1px rgba(74, 222, 128, 0.9);
+          }
+          .btn:hover {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+          }
+          a {
+            color: #9ca3af;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #e5e7eb;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="panel">
+          <h1>서버 규칙 동의</h1>
+          <div class="subtitle">아래 규칙을 읽고 동의하면 인증 역할이 부여됩니다.</div>
+          <div class="rules">
+            ${rulesHtml}
+          </div>
+          <form method="POST" action="/verify/${guildId}">
+            <div class="actions">
+              <span>${req.session.user.username}#${req.session.user.discriminator} 로 로그인됨</span>
+              <button type="submit" class="btn">규칙에 동의하고 인증 받기</button>
+            </div>
+          </form>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('verify 페이지 로딩 오류:', err);
+    return res.status(500).send('인증 페이지를 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+app.post('/verify/:guildId', async (req, res) => {
+  const guildId = req.params.guildId;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect(
+      `/login?from=${encodeURIComponent(`/verify/${guildId}`)}`,
+    );
+  }
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    if (!data.verifyRole) {
+      return res.send('관리자가 아직 인증 역할을 설정하지 않았습니다.');
+    }
+
+    const guild = await client.guilds.fetch(guildId);
+    let member;
+    try {
+      member = await guild.members.fetch(req.session.user.id);
+    } catch (e) {
+      return res
+        .status(404)
+        .send('이 서버에서 해당 디스코드 유저를 찾을 수 없습니다. 서버에 먼저 들어와 주세요.');
+    }
+
+    const role = guild.roles.cache.get(data.verifyRole);
+    if (!role) {
+      return res.status(500).send('설정된 인증 역할을 찾을 수 없습니다.');
+    }
+
+    await member.roles.add(role);
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>인증 완료</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">인증이 완료되었습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            해당 서버에서 인증 역할이 부여되었습니다. 이제 채팅 및 기능을 사용할 수 있습니다.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 패널로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('verify 처리 오류:', err);
+    return res.status(500).send('인증 처리 중 오류가 발생했습니다.');
+  }
 });
 
 // 디스코드 OAuth 로그인
@@ -606,12 +857,16 @@ app.get('/server/:id', async (req, res) => {
       throw new Error(`채널 목록을 가져올 수 없습니다: ${channelsErr.message}`);
     }
 
-    let roleOptions = '';
+    let autoRoleOptions = '';
+    let verifyRoleOptions = '<option value="">선택 안 함</option>';
     roles
       .filter((role) => role.name !== '@everyone')
       .forEach((role) => {
-        const selected = data.autoRole === role.id ? 'selected' : '';
-        roleOptions += `<option value="${role.id}" ${selected}>${role.name}</option>`;
+        const selectedAuto = data.autoRole === role.id ? 'selected' : '';
+        autoRoleOptions += `<option value="${role.id}" ${selectedAuto}>${role.name}</option>`;
+
+        const selectedVerify = data.verifyRole === role.id ? 'selected' : '';
+        verifyRoleOptions += `<option value="${role.id}" ${selectedVerify}>${role.name}</option>`;
       });
 
     const textChannels = [];
@@ -631,6 +886,16 @@ app.get('/server/:id', async (req, res) => {
       /"/g,
       '&quot;',
     );
+    const rulesTextValue = (data.rulesText || '서버 규칙을 읽고 동의해 주세요.').replace(/"/g, '&quot;');
+    const filterWordsValue = (Array.isArray(data.badWords) ? data.badWords.join(', ') : '').replace(
+      /"/g,
+      '&quot;',
+    );
+    const linkWhitelistValue = (Array.isArray(data.linkWhitelist)
+      ? data.linkWhitelist.join(', ')
+      : ''
+    ).replace(/"/g, '&quot;');
+    const blockLinksChecked = data.blockLinks ? 'checked' : '';
 
     res.send(`
       <!DOCTYPE html>
@@ -683,7 +948,7 @@ app.get('/server/:id', async (req, res) => {
             color: #9ca3af;
             margin-bottom: 4px;
           }
-          select, textarea {
+          select, textarea, input[type="text"] {
             width: 100%;
             border-radius: 10px;
             border: 1px solid rgba(55, 65, 81, 1);
@@ -697,7 +962,7 @@ app.get('/server/:id', async (req, res) => {
             min-height: 80px;
             resize: vertical;
           }
-          select:focus, textarea:focus {
+          select:focus, textarea:focus, input[type="text"]:focus {
             border-color: rgba(129, 140, 248, 1);
             box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7);
           }
@@ -741,7 +1006,7 @@ app.get('/server/:id', async (req, res) => {
       <body>
         <div class="panel">
           <h1>${guild.name} 서버 관리</h1>
-          <div class="subtitle">자동 역할, 환영 채널, 환영 메시지를 설정합니다.</div>
+          <div class="subtitle">자동 역할, 환영 / 보안 / 필터링 설정을 관리합니다.</div>
 
           <form method="POST" action="/server/${guildId}/autorole">
             <div class="section">
@@ -749,7 +1014,7 @@ app.get('/server/:id', async (req, res) => {
               <label for="roleId">서버에 새로 들어온 유저에게 부여할 역할</label>
               <select id="roleId" name="roleId">
                 <option value="">선택 안 함</option>
-                ${roleOptions}
+                ${autoRoleOptions}
               </select>
               <div class="hint">역할을 선택하면 새 유저가 들어올 때 자동으로 이 역할이 부여됩니다.</div>
             </div>
@@ -768,6 +1033,35 @@ app.get('/server/:id', async (req, res) => {
               <label for="welcomeMessage">새 유저에게 보낼 메시지</label>
               <textarea id="welcomeMessage" name="welcomeMessage">${welcomeMessageValue}</textarea>
               <div class="hint">{user} 를 사용하면 유저 멘션으로 치환됩니다. 예: "환영합니다, {user}님!"</div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">규칙 동의 / 인증 역할</div>
+              <label for="verifyRole">규칙에 동의한 유저에게 부여할 역할</label>
+              <select id="verifyRole" name="verifyRole">
+                ${verifyRoleOptions}
+              </select>
+              <div class="hint">예: "인증됨", "일반 회원" 등. 설정 후, /verify 링크를 통해 유저가 웹에서 동의하면 이 역할이 부여됩니다.</div>
+
+              <label for="rulesText" style="margin-top:10px;">서버 규칙 / 안내 문구</label>
+              <textarea id="rulesText" name="rulesText">${rulesTextValue}</textarea>
+              <div class="hint">이 문구는 /verify 페이지에서 유저에게 보여집니다.</div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">욕설 / 링크 필터링</div>
+              <label for="filterWords">금지 단어 목록 (쉼표로 구분)</label>
+              <input id="filterWords" name="filterWords" type="text" placeholder="예: 욕1, 욕2, 금지어" value="${filterWordsValue}" />
+              <div class="hint">메시지에 포함되면 자동 삭제됩니다. 대소문자 구분 없이 검색합니다.</div>
+
+              <label style="margin-top:10px;">
+                <input type="checkbox" name="blockLinks" value="1" ${blockLinksChecked} />
+                링크 차단 (화이트리스트에 없는 도메인 자동 삭제)
+              </label>
+
+              <label for="linkWhitelist" style="margin-top:8px;">허용 도메인 목록 (쉼표로 구분)</label>
+              <input id="linkWhitelist" name="linkWhitelist" type="text" placeholder="예: youtube.com, discord.com" value="${linkWhitelistValue}" />
+              <div class="hint">예: youtube.com, discord.com 등. 비워두면 모든 링크를 차단합니다.</div>
             </div>
 
             <div class="actions">
@@ -868,13 +1162,37 @@ app.get('/server/:id', async (req, res) => {
 // 자동 역할 POST 저장
 app.post('/server/:id/autorole', async (req, res) => {
   const guildId = req.params.id;
-  const { roleId, welcomeChannel, welcomeMessage } = req.body;
+  const {
+    roleId,
+    welcomeChannel,
+    welcomeMessage,
+    verifyRole,
+    rulesText,
+    filterWords,
+    blockLinks,
+    linkWhitelist,
+  } = req.body;
 
   await db.collection('servers').doc(guildId).set(
     {
       autoRole: roleId || null,
       welcomeChannel: welcomeChannel || null,
       welcomeMessage: welcomeMessage || '환영합니다, {user}님!',
+      verifyRole: verifyRole || null,
+      rulesText: rulesText || null,
+      badWords: filterWords
+        ? filterWords
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+        : [],
+      blockLinks: !!blockLinks,
+      linkWhitelist: linkWhitelist
+        ? linkWhitelist
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length > 0)
+        : [],
     },
     { merge: true },
   );
@@ -1144,6 +1462,8 @@ app.get('/server/:id/moderation', async (req, res) => {
           }
           input[type="text"], select, textarea {
             width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
             border-radius: 10px;
             border: 1px solid rgba(55, 65, 81, 1);
             background: rgba(15, 23, 42, 0.95);
@@ -1151,6 +1471,7 @@ app.get('/server/:id/moderation', async (req, res) => {
             padding: 7px 9px;
             font-size: 12px;
             outline: none;
+            display: block;
           }
           textarea {
             min-height: 60px;
