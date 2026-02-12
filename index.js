@@ -1056,6 +1056,27 @@ app.get('/server/:id/moderation', async (req, res) => {
               0 24px 70px rgba(0, 0, 0, 0.9),
               0 0 0 1px rgba(30, 64, 175, 0.6);
           }
+          .top-nav {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            margin: -4px -4px 10px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,64,175,0.92));
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.9);
+          }
+          .top-link {
+            font-size: 12px;
+            color: #e5e7eb;
+            text-decoration: none;
+          }
+          .top-link:hover {
+            color: #a5b4fc;
+          }
           .header {
             display: flex;
             justify-content: space-between;
@@ -1094,11 +1115,23 @@ app.get('/server/:id/moderation', async (req, res) => {
             padding: 14px 14px 12px;
             background: radial-gradient(circle at top left, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0.98));
             border: 1px solid rgba(55, 65, 81, 0.9);
+            box-sizing: border-box;
           }
           .card-title {
             font-size: 14px;
             font-weight: 600;
             margin-bottom: 8px;
+          }
+          .card-subtitle {
+            font-size: 12px;
+            font-weight: 600;
+            margin: 6px 0 4px;
+            color: #e5e7eb;
+          }
+          .card-subtitle--divider {
+            border-top: 1px solid rgba(31, 41, 55, 1);
+            padding-top: 6px;
+            margin-top: 10px;
           }
           .field {
             margin-bottom: 8px;
@@ -1213,6 +1246,11 @@ app.get('/server/:id/moderation', async (req, res) => {
       </head>
       <body>
         <div class="shell">
+          <div class="top-nav">
+            <a href="/panel" class="top-link">← 서버 리스트로 돌아가기</a>
+            <a href="/server/${guildId}" class="top-link">기본 서버 설정</a>
+          </div>
+
           <div class="header">
             <div class="title-block">
               <div class="title">${guild.name} 모더레이션 패널</div>
@@ -1224,6 +1262,7 @@ app.get('/server/:id/moderation', async (req, res) => {
           <div class="grid">
             <div class="card">
               <div class="card-title">킥 / 밴</div>
+              <div class="card-subtitle">킥</div>
               <form method="POST" action="/server/${guildId}/moderation/action">
                 <input type="hidden" name="action" value="kick" />
                 <div class="field">
@@ -1237,7 +1276,8 @@ app.get('/server/:id/moderation', async (req, res) => {
                 <button class="btn" type="submit">유저 킥</button>
               </form>
 
-              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+              <div class="card-subtitle card-subtitle--divider">밴</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
                 <input type="hidden" name="action" value="ban" />
                 <div class="field">
                   <label for="banUserId">유저 ID</label>
@@ -1253,6 +1293,7 @@ app.get('/server/:id/moderation', async (req, res) => {
 
             <div class="card">
               <div class="card-title">타임아웃 / 뮤트</div>
+              <div class="card-subtitle">타임아웃</div>
               <form method="POST" action="/server/${guildId}/moderation/action">
                 <input type="hidden" name="action" value="timeout" />
                 <div class="field">
@@ -1276,7 +1317,8 @@ app.get('/server/:id/moderation', async (req, res) => {
                 <button class="btn" type="submit">타임아웃 적용</button>
               </form>
 
-              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+              <div class="card-subtitle card-subtitle--divider">밴 해제</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
                 <input type="hidden" name="action" value="unban" />
                 <div class="field">
                   <label for="unbanUserId">밴 해제 유저 ID</label>
@@ -1288,6 +1330,7 @@ app.get('/server/:id/moderation', async (req, res) => {
 
             <div class="card">
               <div class="card-title">경고 / 자동 처벌</div>
+              <div class="card-subtitle">경고 추가</div>
               <form method="POST" action="/server/${guildId}/moderation/action">
                 <input type="hidden" name="action" value="warn" />
                 <div class="field">
@@ -1305,6 +1348,7 @@ app.get('/server/:id/moderation', async (req, res) => {
 
             <div class="card">
               <div class="card-title">역할 추가 / 제거</div>
+              <div class="card-subtitle">역할 추가</div>
               <form method="POST" action="/server/${guildId}/moderation/action">
                 <input type="hidden" name="action" value="addRole" />
                 <div class="field">
@@ -1320,7 +1364,8 @@ app.get('/server/:id/moderation', async (req, res) => {
                 <button class="btn" type="submit">역할 추가</button>
               </form>
 
-              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:10px;">
+              <div class="card-subtitle card-subtitle--divider">역할 제거</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
                 <input type="hidden" name="action" value="removeRole" />
                 <div class="field">
                   <label for="removeRoleUserId">유저 ID</label>
