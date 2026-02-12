@@ -1701,6 +1701,46 @@ app.get('/server/:id/moderation', async (req, res) => {
                 <button class="btn btn-danger" type="submit">역할 제거</button>
               </form>
             </div>
+
+            <div class="card">
+              <div class="card-title">서버 / 유저 이름 변경</div>
+
+              <div class="card-subtitle">서버 이름 변경</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="renameGuild" />
+                <div class="field">
+                  <label for="guildName">새 서버 이름</label>
+                  <input id="guildName" name="guildName" type="text" placeholder="${guild.name}" />
+                  <div class="hint">Manage Guild 권한이 필요합니다.</div>
+                </div>
+                <button class="btn" type="submit">서버 이름 변경</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">서버 아이콘 변경</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="setIcon" />
+                <div class="field">
+                  <label for="iconUrl">아이콘 이미지 URL</label>
+                  <input id="iconUrl" name="iconUrl" type="text" placeholder="https://example.com/icon.png" />
+                  <div class="hint">정사각형 PNG/JPG 이미지 링크를 넣어주세요. Manage Guild 권한이 필요합니다.</div>
+                </div>
+                <button class="btn" type="submit">서버 아이콘 변경</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">유저 닉네임 변경</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="setNickname" />
+                <div class="field">
+                  <label for="nickUserId">유저 ID</label>
+                  <input id="nickUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="newNick">새 닉네임 (비워두면 초기화)</label>
+                  <input id="newNick" name="nickname" type="text" placeholder="새 닉네임" />
+                </div>
+                <button class="btn" type="submit">닉네임 변경</button>
+              </form>
+            </div>
           </div>
 
           <div class="tables-layout">
@@ -1766,6 +1806,7 @@ app.get('/server/:id/moderation', async (req, res) => {
                 'warnUserId',
                 'addRoleUserId',
                 'removeRoleUserId',
+                'nickUserId',
               ];
               fields.forEach(function (fid) {
                 var el = document.getElementById(fid);
@@ -1814,13 +1855,13 @@ app.get('/server/:id/moderation', async (req, res) => {
 // 모더레이션 액션 처리
 app.post('/server/:id/moderation/action', async (req, res) => {
   const guildId = req.params.id;
-  const { action, userId, durationMinutes, reason, roleId } = req.body;
+  const { action, userId, durationMinutes, reason, roleId, guildName, iconUrl, nickname } = req.body;
 
   if (!botReady) {
     return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
   }
 
-  if (!userId || !action) {
+  if (!action) {
     return res.status(400).send('필수 값이 누락되었습니다.');
   }
 
@@ -1828,8 +1869,12 @@ app.post('/server/:id/moderation/action', async (req, res) => {
     const guild = await client.guilds.fetch(guildId);
     let member = null;
 
-    // 밴/언밴은 멤버가 길드에 없어도 처리 가능
-    if (action !== 'ban' && action !== 'unban') {
+    // 밴/언밴/서버 설정 변경은 멤버가 없어도 처리 가능
+    const needsMember = !['ban', 'unban', 'renameGuild', 'setIcon'].includes(action);
+    if (needsMember) {
+      if (!userId) {
+        throw new Error('유저 ID가 필요합니다.');
+      }
       try {
         member = await guild.members.fetch(userId);
       } catch (fetchErr) {
@@ -1859,6 +1904,30 @@ app.post('/server/:id/moderation/action', async (req, res) => {
       // @ts-ignore
       await member.timeout(ms, reason || undefined);
       resultMessage = `유저 ${userId} 에게 ${minutes}분 타임아웃을 적용했습니다.`;
+    } else if (action === 'renameGuild') {
+      const newName = (guildName || '').trim();
+      if (!newName) {
+        throw new Error('서버 이름을 입력해주세요.');
+      }
+      const oldName = guild.name;
+      await guild.setName(newName);
+      resultMessage = `서버 이름을 "${oldName}" → "${newName}" 으로 변경했습니다.`;
+    } else if (action === 'setIcon') {
+      const url = (iconUrl || '').trim();
+      if (!url) {
+        throw new Error('아이콘 이미지 URL을 입력해주세요.');
+      }
+      await guild.setIcon(url);
+      resultMessage = '서버 아이콘을 변경했습니다.';
+    } else if (action === 'setNickname') {
+      if (!member) {
+        throw new Error('유저를 찾을 수 없습니다.');
+      }
+      const newNick = (nickname || '').trim();
+      await member.setNickname(newNick || null, reason || undefined);
+      resultMessage = newNick
+        ? `유저 ${userId} 의 닉네임을 "${newNick}" 으로 변경했습니다.`
+        : `유저 ${userId} 의 닉네임을 초기화했습니다.`;
     } else if (action === 'warn') {
       const actor = req.session?.user;
       const now = new Date();
