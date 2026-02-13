@@ -859,6 +859,7 @@ app.get('/server/:id', async (req, res) => {
 
     let autoRoleOptions = '';
     let verifyRoleOptions = '<option value="">선택 안 함</option>';
+    let checkinRoleOptions = '<option value="">선택 안 함</option>';
     roles
       .filter((role) => role.name !== '@everyone')
       .forEach((role) => {
@@ -867,6 +868,9 @@ app.get('/server/:id', async (req, res) => {
 
         const selectedVerify = data.verifyRole === role.id ? 'selected' : '';
         verifyRoleOptions += `<option value="${role.id}" ${selectedVerify}>${role.name}</option>`;
+
+        const selectedCheckin = data.dailyCheckinRole === role.id ? 'selected' : '';
+        checkinRoleOptions += `<option value="${role.id}" ${selectedCheckin}>${role.name}</option>`;
       });
 
     const textChannels = [];
@@ -1064,6 +1068,27 @@ app.get('/server/:id', async (req, res) => {
               <div class="hint">예: youtube.com, discord.com 등. 비워두면 모든 링크를 차단합니다.</div>
             </div>
 
+            <div class="section">
+              <div class="section-title">경제 시스템 (코인 / 출석 / 상점)</div>
+              <label for="dailyCoinReward">일일 출석 보상 코인</label>
+              <input id="dailyCoinReward" name="dailyCoinReward" type="number" min="0" placeholder="예: 100" value="${data.dailyCoinReward || ''}" />
+              <div class="hint">매일 출석 체크 시 지급할 코인 수량입니다. 0이면 출석 보상이 비활성화됩니다.</div>
+
+              <label for="dailyCheckinRole" style="margin-top:10px;">출석 보상 역할 (선택)</label>
+              <select id="dailyCheckinRole" name="dailyCheckinRole">
+                ${checkinRoleOptions}
+              </select>
+              <div class="hint">출석 시 추가로 부여할 역할입니다. 선택 안 함을 고르면 코인만 지급됩니다.</div>
+
+              <div style="margin-top:14px;padding:10px;background:rgba(15,23,42,1);border-radius:10px;border:1px solid rgba(31,41,55,1);">
+                <div style="font-size:12px;font-weight:600;margin-bottom:6px;">웹 상점 링크</div>
+                <div style="font-size:11px;color:#6b7280;word-break:break-all;">
+                  <code style="background:#020617;padding:2px 6px;border-radius:4px;">/shop/${guildId}</code>
+                </div>
+                <div class="hint" style="margin-top:4px;">이 링크를 서버 공지에 공유하면 유저들이 웹에서 역할을 구매할 수 있습니다.</div>
+              </div>
+            </div>
+
             <div class="actions">
               <a class="back-link" href="/panel">← 서버 리스트로 돌아가기</a>
               <div style="display:flex;gap:8px;align-items:center;">
@@ -1074,6 +1099,13 @@ app.get('/server/:id', async (req, res) => {
                   style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;"
                 >
                   모더레이션 패널
+                </a>
+                <a
+                  href="/server/${guildId}/shop-settings"
+                  class="save-btn"
+                  style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f59e0b,#d97706);"
+                >
+                  상점 설정
                 </a>
               </div>
             </div>
@@ -1171,6 +1203,8 @@ app.post('/server/:id/autorole', async (req, res) => {
     filterWords,
     blockLinks,
     linkWhitelist,
+    dailyCoinReward,
+    dailyCheckinRole,
   } = req.body;
 
   await db.collection('servers').doc(guildId).set(
@@ -1193,6 +1227,8 @@ app.post('/server/:id/autorole', async (req, res) => {
             .map((s) => s.trim().toLowerCase())
             .filter((s) => s.length > 0)
         : [],
+      dailyCoinReward: dailyCoinReward ? parseInt(dailyCoinReward, 10) || 0 : 0,
+      dailyCheckinRole: dailyCheckinRole || null,
     },
     { merge: true },
   );
@@ -1668,6 +1704,37 @@ app.get('/server/:id/moderation', async (req, res) => {
             </div>
 
             <div class="card">
+              <div class="card-title">코인 관리</div>
+              <div class="card-subtitle">코인 지급</div>
+              <form method="POST" action="/server/${guildId}/moderation/action">
+                <input type="hidden" name="action" value="giveCoins" />
+                <div class="field">
+                  <label for="giveCoinsUserId">유저 ID</label>
+                  <input id="giveCoinsUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="giveCoinsAmount">지급할 코인</label>
+                  <input id="giveCoinsAmount" name="coinAmount" type="number" min="1" placeholder="예: 100" required />
+                </div>
+                <button class="btn" type="submit">코인 지급</button>
+              </form>
+
+              <div class="card-subtitle card-subtitle--divider">코인 회수</div>
+              <form method="POST" action="/server/${guildId}/moderation/action" style="margin-top:4px;">
+                <input type="hidden" name="action" value="removeCoins" />
+                <div class="field">
+                  <label for="removeCoinsUserId">유저 ID</label>
+                  <input id="removeCoinsUserId" name="userId" type="text" placeholder="예: 123456789012345678" required />
+                </div>
+                <div class="field">
+                  <label for="removeCoinsAmount">회수할 코인</label>
+                  <input id="removeCoinsAmount" name="coinAmount" type="number" min="1" placeholder="예: 50" required />
+                </div>
+                <button class="btn btn-danger" type="submit">코인 회수</button>
+              </form>
+            </div>
+
+            <div class="card">
               <div class="card-title">역할 추가 / 제거</div>
               <div class="card-subtitle">역할 추가</div>
               <form method="POST" action="/server/${guildId}/moderation/action">
@@ -1961,6 +2028,8 @@ app.get('/server/:id/moderation', async (req, res) => {
                 'addRoleUserId',
                 'removeRoleUserId',
                 'nickUserId',
+                'giveCoinsUserId',
+                'removeCoinsUserId',
               ];
               fields.forEach(function (fid) {
                 var el = document.getElementById(fid);
@@ -2042,6 +2111,7 @@ app.post('/server/:id/moderation/action', async (req, res) => {
     permUseCmds,
     permConnect,
     permSpeak,
+    coinAmount,
   } = req.body;
 
   if (!botReady) {
@@ -2304,6 +2374,40 @@ app.post('/server/:id/moderation/action', async (req, res) => {
       }
       await member.roles.remove(role);
       resultMessage = `유저 ${userId} 에서 역할 "${role.name}" 을(를) 제거했습니다.`;
+    } else if (action === 'giveCoins') {
+      if (!userId) {
+        throw new Error('유저 ID가 필요합니다.');
+      }
+      const amount = parseInt(coinAmount || '0', 10);
+      if (!amount || amount <= 0) {
+        throw new Error('유효한 코인 수량을 입력해주세요.');
+      }
+
+      const userRef = db.collection('servers').doc(guildId).collection('users').doc(userId);
+      const userDoc = await userRef.get();
+      const userData = userDoc.data() || {};
+      const currentCoins = userData.coins || 0;
+      const newCoins = currentCoins + amount;
+
+      await userRef.set({ coins: newCoins }, { merge: true });
+      resultMessage = `유저 ${userId} 에게 ${amount} 코인을 지급했습니다. (현재: ${newCoins} 코인)`;
+    } else if (action === 'removeCoins') {
+      if (!userId) {
+        throw new Error('유저 ID가 필요합니다.');
+      }
+      const amount = parseInt(coinAmount || '0', 10);
+      if (!amount || amount <= 0) {
+        throw new Error('유효한 코인 수량을 입력해주세요.');
+      }
+
+      const userRef = db.collection('servers').doc(guildId).collection('users').doc(userId);
+      const userDoc = await userRef.get();
+      const userData = userDoc.data() || {};
+      const currentCoins = userData.coins || 0;
+      const newCoins = Math.max(0, currentCoins - amount);
+
+      await userRef.set({ coins: newCoins }, { merge: true });
+      resultMessage = `유저 ${userId} 에서 ${amount} 코인을 회수했습니다. (현재: ${newCoins} 코인)`;
     } else {
       throw new Error('지원하지 않는 액션입니다.');
     }
@@ -2478,6 +2582,813 @@ app.get('/api/roles/:guildId', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '역할 가져오기 실패' });
+  }
+});
+
+// ===== 상점 설정 페이지 =====
+app.get('/server/:id/shop-settings', async (req, res) => {
+  const guildId = req.params.id;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect('/');
+  }
+
+  if (!botReady) {
+    return res.status(503).send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>봇 준비 중</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">봇이 아직 준비되지 않았습니다</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            디스코드 봇이 로그인 중이거나 재시작 중입니다.<br/>
+            잠시 후(약 5-10초) 다시 시도해주세요.
+          </p>
+          <a href="/panel" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 서버 목록으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const roles = await guild.roles.fetch();
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    const shopItems = Array.isArray(data.shopItems) ? data.shopItems : [];
+    const limitedRoles = Array.isArray(data.limitedRoles) ? data.limitedRoles : [];
+
+    let roleOptions = '<option value="">역할 선택</option>';
+    roles
+      .filter((role) => role.name !== '@everyone')
+      .forEach((role) => {
+        roleOptions += `<option value="${role.id}">${role.name}</option>`;
+      });
+
+    const shopItemsHtml = shopItems
+      .map(
+        (item, idx) => `
+      <div style="padding:10px;background:rgba(15,23,42,1);border-radius:10px;border:1px solid rgba(31,41,55,1);margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:600;">${item.roleName || '역할 없음'}</div>
+            <div style="font-size:11px;color:#6b7280;">가격: ${item.price || 0} 코인</div>
+          </div>
+          <form method="POST" action="/server/${guildId}/shop-settings/remove-item" style="display:inline;">
+            <input type="hidden" name="index" value="${idx}" />
+            <button type="submit" style="padding:4px 10px;border-radius:999px;border:none;font-size:11px;font-weight:600;cursor:pointer;color:#f9fafb;background:linear-gradient(135deg,#ef4444,#b91c1c);">삭제</button>
+          </form>
+        </div>
+      </div>
+    `,
+      )
+      .join('');
+
+    const limitedRolesHtml = limitedRoles
+      .map(
+        (item, idx) => {
+          const startDate = item.startDate ? new Date(item.startDate).toISOString().slice(0, 16) : '';
+          const endDate = item.endDate ? new Date(item.endDate).toISOString().slice(0, 16) : '';
+          return `
+      <div style="padding:10px;background:rgba(15,23,42,1);border-radius:10px;border:1px solid rgba(31,41,55,1);margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:600;">${item.roleName || '역할 없음'}</div>
+            <div style="font-size:11px;color:#6b7280;">가격: ${item.price || 0} 코인</div>
+            <div style="font-size:10px;color:#6b7280;">기간: ${startDate} ~ ${endDate}</div>
+          </div>
+          <form method="POST" action="/server/${guildId}/shop-settings/remove-limited" style="display:inline;">
+            <input type="hidden" name="index" value="${idx}" />
+            <button type="submit" style="padding:4px 10px;border-radius:999px;border:none;font-size:11px;font-weight:600;cursor:pointer;color:#f9fafb;background:linear-gradient(135deg,#ef4444,#b91c1c);">삭제</button>
+          </form>
+        </div>
+      </div>
+    `;
+        },
+      )
+      .join('');
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${guild.name} - 상점 설정</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 32px 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+          }
+          .panel {
+            width: 100%;
+            max-width: 900px;
+            background: rgba(15, 23, 42, 0.9);
+            border-radius: 24px;
+            padding: 28px 24px 24px;
+            box-shadow:
+              0 20px 60px rgba(0, 0, 0, 0.8),
+              0 0 0 1px rgba(148, 163, 184, 0.35);
+          }
+          h1 {
+            font-size: 22px;
+            margin: 0 0 4px 0;
+          }
+          .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 20px;
+          }
+          .section {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(31, 41, 55, 1);
+          }
+          .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+          }
+          label {
+            display: block;
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+          }
+          select, textarea, input[type="text"], input[type="number"], input[type="datetime-local"] {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid rgba(55, 65, 81, 1);
+            background: rgba(15, 23, 42, 0.95);
+            color: #e5e7eb;
+            padding: 8px 10px;
+            font-size: 13px;
+            outline: none;
+            box-sizing: border-box;
+          }
+          select:focus, textarea:focus, input:focus {
+            border-color: rgba(129, 140, 248, 1);
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7);
+          }
+          .hint {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #6b7280;
+          }
+          .actions {
+            margin-top: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .save-btn {
+            padding: 8px 18px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            box-shadow:
+              0 12px 30px rgba(88, 101, 242, 0.7),
+              0 0 0 1px rgba(165, 180, 252, 0.9);
+          }
+          .save-btn:hover {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+          }
+          .back-link {
+            font-size: 12px;
+            color: #9ca3af;
+            text-decoration: none;
+          }
+          .back-link:hover {
+            color: #e5e7eb;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="panel">
+          <h1>${guild.name} 상점 설정</h1>
+          <div class="subtitle">역할 판매 상품과 한정 판매를 관리합니다.</div>
+
+          <form method="POST" action="/server/${guildId}/shop-settings/add-item">
+            <div class="section">
+              <div class="section-title">일반 상점 아이템 추가</div>
+              <label for="shopRoleId">판매할 역할</label>
+              <select id="shopRoleId" name="roleId" required>
+                ${roleOptions}
+              </select>
+              <label for="shopPrice" style="margin-top:8px;">가격 (코인)</label>
+              <input id="shopPrice" name="price" type="number" min="1" placeholder="예: 500" required />
+              <div class="hint">유저가 이 역할을 구매하는데 필요한 코인 수량입니다.</div>
+              <button type="submit" class="save-btn" style="margin-top:10px;">상점에 추가</button>
+            </div>
+          </form>
+
+          <form method="POST" action="/server/${guildId}/shop-settings/add-limited">
+            <div class="section">
+              <div class="section-title">한정 판매 역할 추가</div>
+              <label for="limitedRoleId">판매할 역할</label>
+              <select id="limitedRoleId" name="roleId" required>
+                ${roleOptions}
+              </select>
+              <label for="limitedPrice" style="margin-top:8px;">가격 (코인)</label>
+              <input id="limitedPrice" name="price" type="number" min="1" placeholder="예: 1000" required />
+              <label for="limitedStart" style="margin-top:8px;">판매 시작 시간</label>
+              <input id="limitedStart" name="startDate" type="datetime-local" required />
+              <label for="limitedEnd" style="margin-top:8px;">판매 종료 시간</label>
+              <input id="limitedEnd" name="endDate" type="datetime-local" required />
+              <div class="hint">지정된 기간 동안만 구매 가능한 한정 역할입니다.</div>
+              <button type="submit" class="save-btn" style="margin-top:10px;">한정 판매에 추가</button>
+            </div>
+          </form>
+
+          <div class="section">
+            <div class="section-title">현재 상점 아이템 목록</div>
+            ${shopItemsHtml || '<div style="font-size:12px;color:#6b7280;padding:10px 0;">등록된 상품이 없습니다.</div>'}
+          </div>
+
+          <div class="section">
+            <div class="section-title">한정 판매 목록</div>
+            ${limitedRolesHtml || '<div style="font-size:12px;color:#6b7280;padding:10px 0;">등록된 한정 판매가 없습니다.</div>'}
+          </div>
+
+          <div class="actions">
+            <a class="back-link" href="/server/${guildId}">← 서버 설정으로 돌아가기</a>
+            <a href="/shop/${guildId}" class="save-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">상점 미리보기</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('상점 설정 페이지 로딩 오류:', err);
+    return res.status(500).send('상점 설정 페이지를 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+// 상점 아이템 추가
+app.post('/server/:id/shop-settings/add-item', async (req, res) => {
+  const guildId = req.params.id;
+  const { roleId, price } = req.body;
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      return res.status(400).send('해당 역할을 찾을 수 없습니다.');
+    }
+
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+    const shopItems = Array.isArray(data.shopItems) ? data.shopItems : [];
+
+    shopItems.push({
+      roleId,
+      roleName: role.name,
+      price: parseInt(price, 10) || 0,
+    });
+
+    await db.collection('servers').doc(guildId).set({ shopItems }, { merge: true });
+
+    res.redirect(`/server/${guildId}/shop-settings`);
+  } catch (err) {
+    console.error('상점 아이템 추가 오류:', err);
+    return res.status(500).send('상점 아이템 추가 중 오류가 발생했습니다.');
+  }
+});
+
+// 상점 아이템 제거
+app.post('/server/:id/shop-settings/remove-item', async (req, res) => {
+  const guildId = req.params.id;
+  const index = parseInt(req.body.index, 10);
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+    const shopItems = Array.isArray(data.shopItems) ? data.shopItems : [];
+
+    if (index >= 0 && index < shopItems.length) {
+      shopItems.splice(index, 1);
+      await db.collection('servers').doc(guildId).set({ shopItems }, { merge: true });
+    }
+
+    res.redirect(`/server/${guildId}/shop-settings`);
+  } catch (err) {
+    console.error('상점 아이템 제거 오류:', err);
+    return res.status(500).send('상점 아이템 제거 중 오류가 발생했습니다.');
+  }
+});
+
+// 한정 판매 추가
+app.post('/server/:id/shop-settings/add-limited', async (req, res) => {
+  const guildId = req.params.id;
+  const { roleId, price, startDate, endDate } = req.body;
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      return res.status(400).send('해당 역할을 찾을 수 없습니다.');
+    }
+
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+    const limitedRoles = Array.isArray(data.limitedRoles) ? data.limitedRoles : [];
+
+    limitedRoles.push({
+      roleId,
+      roleName: role.name,
+      price: parseInt(price, 10) || 0,
+      startDate: new Date(startDate).toISOString(),
+      endDate: new Date(endDate).toISOString(),
+    });
+
+    await db.collection('servers').doc(guildId).set({ limitedRoles }, { merge: true });
+
+    res.redirect(`/server/${guildId}/shop-settings`);
+  } catch (err) {
+    console.error('한정 판매 추가 오류:', err);
+    return res.status(500).send('한정 판매 추가 중 오류가 발생했습니다.');
+  }
+});
+
+// 한정 판매 제거
+app.post('/server/:id/shop-settings/remove-limited', async (req, res) => {
+  const guildId = req.params.id;
+  const index = parseInt(req.body.index, 10);
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+    const limitedRoles = Array.isArray(data.limitedRoles) ? data.limitedRoles : [];
+
+    if (index >= 0 && index < limitedRoles.length) {
+      limitedRoles.splice(index, 1);
+      await db.collection('servers').doc(guildId).set({ limitedRoles }, { merge: true });
+    }
+
+    res.redirect(`/server/${guildId}/shop-settings`);
+  } catch (err) {
+    console.error('한정 판매 제거 오류:', err);
+    return res.status(500).send('한정 판매 제거 중 오류가 발생했습니다.');
+  }
+});
+
+// ===== 웹 상점 페이지 =====
+app.get('/shop/:guildId', async (req, res) => {
+  const guildId = req.params.guildId;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect(`/login?from=${encodeURIComponent(`/shop/${guildId}`)}`);
+  }
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    // 유저 코인 조회
+    const userDoc = await db
+      .collection('servers')
+      .doc(guildId)
+      .collection('users')
+      .doc(req.session.user.id)
+      .get();
+    const userData = userDoc.data() || {};
+    const userCoins = userData.coins || 0;
+
+    // 마지막 출석 날짜 확인
+    const lastCheckin = userData.lastCheckin
+      ? new Date(userData.lastCheckin.toDate ? userData.lastCheckin.toDate() : userData.lastCheckin)
+      : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const canCheckin = !lastCheckin || new Date(lastCheckin).setHours(0, 0, 0, 0) < today.getTime();
+
+    const shopItems = Array.isArray(data.shopItems) ? data.shopItems : [];
+    const limitedRoles = Array.isArray(data.limitedRoles)
+      ? data.limitedRoles.filter((item) => {
+          const now = new Date();
+          const start = new Date(item.startDate);
+          const end = new Date(item.endDate);
+          return now >= start && now <= end;
+        })
+      : [];
+
+    const dailyReward = data.dailyCoinReward || 0;
+
+    const shopItemsHtml = shopItems
+      .map(
+        (item) => `
+      <div style="padding:14px;background:rgba(15,23,42,1);border-radius:14px;border:1px solid rgba(31,41,55,1);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">${item.roleName || '역할 없음'}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:2px;">${item.price || 0} 코인</div>
+        </div>
+        <form method="POST" action="/shop/${guildId}/buy" style="display:inline;">
+          <input type="hidden" name="roleId" value="${item.roleId}" />
+          <input type="hidden" name="type" value="normal" />
+          <button type="submit" class="shop-btn" ${userCoins < (item.price || 0) ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+            구매
+          </button>
+        </form>
+      </div>
+    `,
+      )
+      .join('');
+
+    const limitedHtml = limitedRoles
+      .map(
+        (item) => {
+          const endDate = new Date(item.endDate);
+          const endStr = endDate.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          return `
+      <div style="padding:14px;background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(15,23,42,1));border-radius:14px;border:1px solid rgba(245,158,11,0.5);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">${item.roleName || '역할 없음'}</div>
+          <div style="font-size:12px;color:#f59e0b;margin-top:2px;">${item.price || 0} 코인 · 한정 판매</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px;">판매 종료: ${endStr}</div>
+        </div>
+        <form method="POST" action="/shop/${guildId}/buy" style="display:inline;">
+          <input type="hidden" name="roleId" value="${item.roleId}" />
+          <input type="hidden" name="type" value="limited" />
+          <button type="submit" class="shop-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);" ${userCoins < (item.price || 0) ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+            구매
+          </button>
+        </form>
+      </div>
+    `;
+        },
+      )
+      .join('');
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${guild.name} - 상점</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 24px 12px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #4f46e5 0, #020617 45%, #000000 100%);
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+          }
+          .shell {
+            width: 100%;
+            max-width: 900px;
+            border-radius: 24px;
+            padding: 26px 22px 22px;
+            background: rgba(15, 23, 42, 0.94);
+            box-shadow:
+              0 24px 70px rgba(0, 0, 0, 0.9),
+              0 0 0 1px rgba(30, 64, 175, 0.6);
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 20px;
+          }
+          .title-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+          .title {
+            font-size: 22px;
+            font-weight: 700;
+          }
+          .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+          }
+          .coin-badge {
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.3));
+            border: 1px solid rgba(245,158,11,0.6);
+            font-size: 14px;
+            font-weight: 600;
+            color: #fbbf24;
+          }
+          .section {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(31, 41, 55, 1);
+          }
+          .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 10px;
+          }
+          .checkin-btn {
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            box-shadow:
+              0 12px 30px rgba(34, 197, 94, 0.7),
+              0 0 0 1px rgba(74, 222, 128, 0.9);
+          }
+          .checkin-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+          }
+          .checkin-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+          .shop-btn {
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #f9fafb;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            box-shadow:
+              0 10px 28px rgba(79, 70, 229, 0.7),
+              0 0 0 1px rgba(165, 180, 252, 0.9);
+          }
+          .shop-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+          }
+          .shop-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+          .back-link {
+            font-size: 12px;
+            color: #9ca3af;
+            text-decoration: none;
+          }
+          .back-link:hover {
+            color: #e5e7eb;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="shell">
+          <div class="header">
+            <div class="title-block">
+              <div class="title">${guild.name} 상점</div>
+              <div class="subtitle">코인으로 역할을 구매하세요.</div>
+            </div>
+            <div class="coin-badge">💰 ${userCoins} 코인</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">일일 출석 보상</div>
+            ${dailyReward > 0 ? `
+              <form method="POST" action="/checkin/${guildId}">
+                <button type="submit" class="checkin-btn" ${canCheckin ? '' : 'disabled'}>
+                  ${canCheckin ? `출석 체크 (${dailyReward} 코인 받기)` : '오늘 이미 출석했습니다'}
+                </button>
+              </form>
+            ` : '<div style="font-size:12px;color:#6b7280;">일일 출석 보상이 설정되지 않았습니다.</div>'}
+          </div>
+
+          <div class="section">
+            <div class="section-title">일반 상점</div>
+            ${shopItemsHtml || '<div style="font-size:12px;color:#6b7280;padding:10px 0;">등록된 상품이 없습니다.</div>'}
+          </div>
+
+          ${limitedRoles.length > 0 ? `
+          <div class="section">
+            <div class="section-title">한정 판매</div>
+            ${limitedHtml}
+          </div>
+          ` : ''}
+
+          <div style="margin-top:20px;text-align:center;">
+            <a href="/panel" class="back-link">← 서버 목록으로 돌아가기</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('상점 페이지 로딩 오류:', err);
+    return res.status(500).send('상점 페이지를 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+// 출석 체크
+app.post('/checkin/:guildId', async (req, res) => {
+  const guildId = req.params.guildId;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect(`/login?from=${encodeURIComponent(`/checkin/${guildId}`)}`);
+  }
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다.');
+  }
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+    const dailyReward = data.dailyCoinReward || 0;
+
+    if (dailyReward <= 0) {
+      return res.send('일일 출석 보상이 설정되지 않았습니다.');
+    }
+
+    const userId = req.session.user.id;
+    const userRef = db.collection('servers').doc(guildId).collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data() || {};
+
+    const lastCheckin = userData.lastCheckin
+      ? new Date(userData.lastCheckin.toDate ? userData.lastCheckin.toDate() : userData.lastCheckin)
+      : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (lastCheckin && new Date(lastCheckin).setHours(0, 0, 0, 0) >= today.getTime()) {
+      return res.send('오늘 이미 출석했습니다. 내일 다시 시도해주세요.');
+    }
+
+    const currentCoins = userData.coins || 0;
+    const newCoins = currentCoins + dailyReward;
+
+    await userRef.set(
+      {
+        coins: newCoins,
+        lastCheckin: new Date(),
+      },
+      { merge: true },
+    );
+
+    // 출석 보상 역할 지급
+    if (data.dailyCheckinRole) {
+      try {
+        const guild = await client.guilds.fetch(guildId);
+        const member = await guild.members.fetch(userId);
+        const role = guild.roles.cache.get(data.dailyCheckinRole);
+        if (role) {
+          await member.roles.add(role).catch(() => {});
+        }
+      } catch (err) {
+        console.error('출석 역할 지급 실패:', err);
+      }
+    }
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>출석 완료</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">출석 체크 완료!</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            ${dailyReward} 코인을 받았습니다. (현재 보유: ${newCoins} 코인)
+          </p>
+          <a href="/shop/${guildId}" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 상점으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('출석 체크 오류:', err);
+    return res.status(500).send('출석 체크 중 오류가 발생했습니다.');
+  }
+});
+
+// 상점 구매
+app.post('/shop/:guildId/buy', async (req, res) => {
+  const guildId = req.params.guildId;
+  const { roleId, type } = req.body;
+
+  if (!req.session.user || !req.session.access_token) {
+    return res.redirect(`/login?from=${encodeURIComponent(`/shop/${guildId}`)}`);
+  }
+
+  if (!botReady) {
+    return res.status(503).send('봇이 아직 준비되지 않았습니다.');
+  }
+
+  try {
+    const doc = await db.collection('servers').doc(guildId).get();
+    const data = doc.data() || {};
+
+    let item = null;
+    if (type === 'limited') {
+      const limitedRoles = Array.isArray(data.limitedRoles) ? data.limitedRoles : [];
+      item = limitedRoles.find((r) => r.roleId === roleId);
+      if (!item) {
+        return res.send('해당 한정 판매를 찾을 수 없습니다.');
+      }
+      const now = new Date();
+      const start = new Date(item.startDate);
+      const end = new Date(item.endDate);
+      if (now < start || now > end) {
+        return res.send('현재 판매 기간이 아닙니다.');
+      }
+    } else {
+      const shopItems = Array.isArray(data.shopItems) ? data.shopItems : [];
+      item = shopItems.find((r) => r.roleId === roleId);
+      if (!item) {
+        return res.send('해당 상품을 찾을 수 없습니다.');
+      }
+    }
+
+    const userId = req.session.user.id;
+    const userRef = db.collection('servers').doc(guildId).collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data() || {};
+    const userCoins = userData.coins || 0;
+
+    if (userCoins < item.price) {
+      return res.send(`코인이 부족합니다. (필요: ${item.price}, 보유: ${userCoins})`);
+    }
+
+    const guild = await client.guilds.fetch(guildId);
+    let member;
+    try {
+      member = await guild.members.fetch(userId);
+    } catch (e) {
+      return res.send('이 서버에서 해당 디스코드 유저를 찾을 수 없습니다.');
+    }
+
+    const role = guild.roles.cache.get(item.roleId);
+    if (!role) {
+      return res.send('해당 역할을 찾을 수 없습니다.');
+    }
+
+    // 이미 역할이 있는지 확인
+    if (member.roles.cache.has(item.roleId)) {
+      return res.send('이미 해당 역할을 보유하고 있습니다.');
+    }
+
+    // 역할 부여
+    await member.roles.add(role);
+
+    // 코인 차감
+    await userRef.set(
+      {
+        coins: userCoins - item.price,
+      },
+      { merge: true },
+    );
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8" />
+        <title>구매 완료</title>
+      </head>
+      <body style="background:#020617;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+        <div style="max-width:520px;padding:24px 20px;border-radius:18px;background:#111827;box-shadow:0 18px 45px rgba(0,0,0,.8),0 0 0 1px rgba(31,41,55,1);">
+          <h2 style="margin:0 0 8px 0;font-size:20px;">구매 완료!</h2>
+          <p style="margin:0 0 14px 0;font-size:13px;color:#9ca3af;">
+            역할 "${item.roleName}" 을(를) 구매했습니다.<br/>
+            ${item.price} 코인이 차감되었습니다. (잔액: ${userCoins - item.price} 코인)
+          </p>
+          <a href="/shop/${guildId}" style="font-size:13px;color:#a5b4fc;text-decoration:none;">← 상점으로 돌아가기</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('구매 처리 오류:', err);
+    return res.status(500).send('구매 처리 중 오류가 발생했습니다.');
   }
 });
 
